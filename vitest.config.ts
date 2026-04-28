@@ -8,7 +8,13 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    exclude: [
+      "tests/unit/scripts/**",
+      "tests/unit/lint/**",
+      "node_modules/**",
+    ],
     globals: false,
+    setupFiles: ["tests/game/setup.ts"],
   },
   resolve: {
     alias: {

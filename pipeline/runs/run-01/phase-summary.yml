@@ -1,0 +1,317 @@
+# phase-summary.yml — per-phase keys, written as each phase completes
+# Downstream phases read only the keys they need.
+
+pass_gate:
+  status: complete
+  pass: core
+  previous_pass_stable: true
+  previous_run_ref: null
+  skip_reason: ""
+  carry_forward: {}
+
+prime:
+  status: complete
+  project: "Mystery Inc. Mash: Clue Connect"
+  stack: "pixi + solidjs + gsap + bun (vite, vitest)"
+  existing_features: 5
+  dom_overlays:
+    - element: WolfGamesLogo
+      position: bottom
+      total_reserved_px: 56
+  carry_forward:
+    target_device: "iPhone reference portrait 390x844 (dvh)"
+    game_greenfield: true
+    reserved_bottom_px: 56
+    reserved_top_px: 0
+    game_controller_stub: true
+    stack_gaps: []
+    host_rules_missing: true
+
+analyze:
+  status: complete
+  feature_counts:
+    exists: 3
+    partial: 2
+    new: 18
+    conflict: 2
+    content_gap: 2
+    total: 27
+  conflict_breakdown:
+    reuse: 1
+    adapt: 1
+    replace: 0
+  high_risk:
+    - game-controller
+    - 7x9-grid-layout
+    - tap-drag-chain-interaction
+  medium_risk:
+    - start-screen
+    - ecs-plugin
+    - clue-tiles
+    - gravity-fill-system
+    - evidence-meter
+    - move-counter
+    - mystery-box-tile
+    - red-herring-blocker
+    - cobweb-blocker
+    - locked-door-blocker
+    - trap-door-cell
+    - level-generator
+    - hud-layout
+    - companion-system
+    - pause-and-hint-buttons
+    - tutorial-levels
+    - chapter-flow-screens
+    - board-state-machine
+    - win-loss-sequences
+    - conflict-game-state-signals
+  open_questions: 5
+  carry_forward:
+    critical_integration_point: game-controller
+    transformative_hint: false
+
+plan:
+  status: complete
+  gdd_type: "additive"
+  batches: 7
+  features: 27
+  new_files: 28
+  modified_files: 7
+  viewport_budget:
+    cell_size_px: 52
+    hud_top_px: 120
+    bottom_band_px: 80
+    dom_reserved_bottom_px: 56
+    board_height_px: 580
+    board_width_px: 374
+  resolved_questions: 5
+  out_of_pass_cos: []
+  warnings:
+    - "viewport-budget key was empty ({}) in pipeline-context.yml at plan start; written clean by 30-plan (sole owner)"
+  resolved_questions_scalars:
+    oq-1: "clue-connect"
+    oq-2: "base 10 coins per level plus 5 per star earned"
+    oq-3: "mock for core pass; ad SDK deferred to meta pass"
+    oq-4: "Scooby=level-start+win; Ch1=Velma; Ch2=Shaggy; Ch3=Fred; Ch4=Daphne"
+    oq-5: "longest valid chain BFS greedy; topmost-leftmost start on tie"
+  carry_forward:
+    game_slug: "clue-connect"
+    hook_batch: 1
+    priority_ordering_applied: true
+    cos_deferred_to_batch: {}
+    viewport_budget_derived_from: "greenfield_defaults"
+    critical_integration_point: "game-controller"
+
+implement:
+  status: complete
+  batches_completed: 7
+  batches_total: 7
+  test_files: 18
+  tests_passing: 89
+  tests_failing: 0
+  build_clean: true
+  files_created:
+    # Config
+    - src/game/clue-connect/config/layout.ts
+    # State / ECS
+    - src/game/clue-connect/ClueConnectPlugin.ts
+    - src/game/clue-connect/state/types.ts
+    - src/game/clue-connect/state/bridgeEcsToSignals.ts
+    - src/game/clue-connect/state/scoringLogic.ts
+    - src/game/clue-connect/state/gravityLogic.ts
+    - src/game/clue-connect/state/companionLogic.ts
+    # Entities
+    - src/game/clue-connect/entities/TileEntity.ts
+    - src/game/clue-connect/entities/SpecialTileEntity.ts
+    - src/game/clue-connect/entities/BlockerEntity.ts
+    # Level gen
+    - src/game/clue-connect/levelgen/SeededRng.ts
+    - src/game/clue-connect/levelgen/LevelGenerator.ts
+    - src/game/clue-connect/levelgen/SolvabilityValidator.ts
+    - src/game/clue-connect/levelgen/TutorialOverlay.ts
+    # Data
+    - src/game/clue-connect/data/fallback-levels.json
+    - src/game/clue-connect/data/handcrafted-levels.json
+    # Renderers
+    - src/game/clue-connect/renderers/TileRenderer.ts
+    - src/game/clue-connect/renderers/BoardRenderer.ts
+    - src/game/clue-connect/renderers/ChainRenderer.ts
+    - src/game/clue-connect/renderers/HudRenderer.ts
+    - src/game/clue-connect/renderers/CompanionRenderer.ts
+    # Input
+    - src/game/clue-connect/input/ChainInputHandler.ts
+    # Screens
+    - src/game/clue-connect/screens/gameController.ts
+    - src/game/clue-connect/screens/startView.ts
+    - src/game/clue-connect/screens/firstLaunchFlag.ts
+    - src/game/clue-connect/index.ts
+    # Tests infra
+    - tests/game/setup.ts
+  files_modified:
+    - src/game/asset-manifest.ts
+    - src/game/screens/GameScreen.tsx
+    - src/game/screens/ResultsScreen.tsx
+    - src/game/mygame-contract.ts
+    - vitest.config.ts
+  cos_sub_walks:
+    - batch: 1
+      cos: [canvas, core-interaction, animated-dynamics, scoring]
+      result: clean
+    - batch: 2
+      cos: [core-interaction, animated-dynamics]
+      result: clean
+    - batch: 3
+      cos: [canvas, core-interaction, scoring]
+      result: clean
+    - batch: 4
+      cos: [animated-dynamics, scoring]
+      result: clean
+    - batch: 5
+      cos: [core-interaction, animated-dynamics, scoring]
+      result: clean
+    - batch: 6
+      cos: [core-interaction, canvas]
+      result: clean
+    - batch: 7
+      cos: [core-interaction, animated-dynamics, canvas]
+      result: clean
+  ux_walks_clean: true
+  design_smell_scans_clean: true
+  key_decisions:
+    - "computeStars uses percentage overflow to avoid floating-point comparison (100*1.10=110.00000000000001)"
+    - "Node.js test env requires globalThis.caches stub (tests/game/setup.ts) for @adobe/data ECS import"
+    - "gravityLogic: new tiles spawn at top rows (refill.row = final board position, not spawn position)"
+    - "LevelGenerator retry: seed+attempt up to 10 retries before fallback JSON"
+    - "SeededRng: mulberry32 algorithm for good distribution"
+    - "gameController.goto via deps.goto optional field added to GameControllerDeps"
+    - "CompanionRenderer: reaction emoji appended to portrait text, resets after 1s"
+  carry_forward:
+    game_slug: "clue-connect"
+    test_count: 89
+    build_status: clean
+    integration_point_wired: true
+    goto_wired_via_deps: true
+    viewport_budget_changed: false
+    asset_fallbacks_applied:
+      tile-entities: emoji
+      companion-portrait: emoji
+      hud-buttons: emoji
+      chain-trail: graphics-shape  # UI decorator, not a tile entity — acceptable
+      board-background: graphics-shape  # backdrop, not a tile entity — acceptable
+    batch_boundary_violations:
+      - "HudRenderer: companion area stub rendered inside HudRenderer._initTopBand(); CompanionRenderer was added in batch 6 and renders the same area"
+      - "TileRenderer: getAllTileKinds() exported with no consumer in game loop"
+      - "TileRenderer: TILE_LABELS imported but unused"
+    unfixed_ux_issues: []
+
+player_flow:
+  status: complete
+  journey_walked: true
+  transitions_checked:
+    - start-to-game
+    - game-to-results-win
+    - game-to-results-loss
+    - results-to-game-next-level
+    - results-to-game-try-again
+    - results-to-game-watch-ad
+    - results-to-start-chapter-map
+  fun_test_result: pass
+  issues_found: 5
+  fixes_applied: 3
+  carry_forward:
+    journey_breaks:
+      - "start-to-game-first-launch: intro cutscene screen (batch-6) not connected; first-time player routes directly to game bypassing onboarding cutscene"
+      - "results-chapter-map-button: goto('start') routes to title screen, not a Chapter Map screen; player expectation mismatch"
+    fun_test_failed_features: []
+    difficulty_mismatch: []
+    theme_drift: []
+    cos_still_failing: []
+
+integrate:
+  status: complete
+  viewport_rederived: false
+  orphans_wired: []
+  orphans_deleted:
+    - "src/game/clue-connect/renderers/TileRenderer.ts:getAllTileKinds"
+  fallbacks_unified:
+    - "removed dead TILE_LABELS import from TileRenderer.ts (imported but never used)"
+    - "removed companion area stub from HudRenderer._initTopBand() (duplicate of CompanionRenderer visual)"
+  unreachable: []
+  warnings: []
+  carry_forward:
+    viewport_budget_recomputed_total: 740
+    # 740 = HUD_H(120) + GRID_H(484) + BOTTOM_BAND_H(80) + DOM_RESERVED_BOTTOM(56); slack=104px; no overflow
+    asset_fallbacks_unified_style: "emoji"
+    unreachable_blocks_playability: false
+    orphan_wiring_blocked: []
+
+verify:
+  status: complete
+  build_status: clean
+  build_warnings:
+    - "tweakpane dynamic+static import mix (pre-existing, not game code)"
+    - "Two chunks > 500 kB after minification (pixi + game bundle; acceptable for this pass)"
+  test_files: 29
+  tests_passing: 230
+  tests_failing: 0
+  fix_cycles: 1
+  fixes_applied:
+    - "Fixed tests/unit/assets/facade.test.ts: updated @wolfgames/components/core mock to include createAssetCoordinator, createDomLoader, createSignal, KIND_TO_PREFIX, KIND_TO_LOADER (pre-existing scaffold test used wrong mock shape)"
+    - "Fixed tests/unit/assets/facade-unload.test.ts: same mock correction; wired coordinator loader unload to coordinator loaded-Set; updated test API calls (loadingState() → loadingStateSignal.get(), dispose → getLoader, getGpuLoader → getLoader('gpu'))"
+    - "vitest.config.ts: excluded tests/unit/scripts/** and tests/unit/lint/** which use bun:test and cannot run under vitest"
+  playability_result: "visual verification skipped — browser MCP not available"
+  remaining_issues:
+    - "start-to-game-first-launch: intro cutscene bypassed (carried from player_flow)"
+    - "results-chapter-map-button: routes to title, not chapter map (carried from player_flow)"
+  carry_forward:
+    browser_verified: false
+    unwinnable: false
+    perf_flags: []
+
+stabilize:
+  status: partial
+  pipeline_status: partial
+  completion_ratio: "17/18"
+  test_count: 242
+  build_status: clean
+  build_warnings:
+    - "tweakpane dynamic+static import mix (pre-existing, not game code)"
+    - "Two chunks > 500 kB after minification (pixi + game bundle; acceptable for this pass)"
+  fix_cycles: 0
+  fixes_applied:
+    - "Added interaction-archetype.md for core-interaction CoS exit criterion"
+    - "Added showScorePopup() to BoardRenderer; wired in gameController pointerup handler (completeness: score popup animation at clear location)"
+    - "Added edge-case tests in tests/game/clue-connect/edgeCases.test.ts (12 new tests)"
+  cos_walk:
+    - id: core-interaction
+      verdict: pass
+      rationale: "Swipe-Select archetype documented (interaction-archetype.md added); pointer events with touch-action:none; ANIMATING phase gates input; single-tile cancel silent per GDD spec; tutorial level 1 provides 3s onboarding"
+    - id: canvas
+      verdict: pass
+      rationale: "CELL_SIZE=52px ≥ 48px required; 6 tile types visually distinct via unique emoji+tint+bg-color; cell gap 2px + 5px per-side internal padding = ~12px effective visual separation; HUD(120)+GRID(484)+BOTTOM(80)+DOM(56)=740 ≤ 844, no overlap"
+    - id: animated-dynamics
+      verdict: pass
+      rationale: "GSAP bounce.out gravity with stable tileId identity; board-diff produces only moved-tile animations; ANIMATING phase blocks input; score popup floats on clear; ChainRenderer confirm burst; no instant state changes"
+    - id: scoring
+      verdict: pass
+      rationale: "Two independent multiplicative dimensions: computeScore(chainLen)=base*chainLen*(1+(chainLen-2)*0.5) and evidenceFillAmount(chainLen)=10*(1+(chainLen-2)*1.5); star tiers 1/2/3 at 0%/10%/25% overflow; chain of 6 scores >2× chain of 3"
+  cos_failed: []
+  cos_rationale: {}
+  completeness_gaps:
+    - id: cascade-escalation
+      reason: "Clue Connect has no auto-cascade chains (player must make next move per GDD Movement & Physics Rules). Checklist item is inapplicable to this game's mechanics — not a missing implementation. Recommend formally removing from secondary pass walks."
+  notes: |
+    pipeline_status = partial because completeness_gaps is non-empty (1 N/A item).
+    All 4 mandatory CoS for pass core are PASS. Build clean; 242/242 tests pass.
+    Two known routing issues (first-launch intro bypass, chapter-map routes to title) are
+    player_flow gaps carried from previous phase — not CoS failures.
+    score popup animation added inline to close completeness gap on "score popup at clear location".
+  carry_forward:
+    next_pass_ready: false
+    unresolved_for_next_pass:
+      - "cascade-escalation: confirm with game design team that N/A; remove from secondary checklist"
+      - "first-launch-routing: IntroScreen.tsx not wired to first-launch flow in StartScreen.tsx"
+      - "chapter-map: no Chapter Map screen exists; results Chapter Map button routes to title"
+      - "red-herring-corner: shouldClearRedHerring uses >=4; corner placement (2 orthogonal neighbors) needs context-aware count"
+      - "score-hud-display: score resource updated in ECS but not displayed on HUD top band"
+    pass_stability: stable

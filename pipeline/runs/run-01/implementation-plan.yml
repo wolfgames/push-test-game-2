@@ -1,0 +1,772 @@
+# implementation-plan.yml — Structured batch execution plan
+# Written by phase 30 (plan). Read by implement, integrate, player-flow, stabilize.
+# Game: Mystery Inc. Mash: Clue Connect
+# Slug: clue-connect
+# GDD: pipeline/game-prompt.md
+# Pass: core
+
+game: "Mystery Inc. Mash: Clue Connect"
+gdd_type: "additive"
+# Rationale: conflict_breakdown shows 0 replace, 1 reuse, 1 adapt; core mechanic (board + chain
+# interaction) is net-new on a largely empty mygame scaffold. Existing infrastructure (signals,
+# screen shells, manifest skeleton) is preserved/adapted, not replaced.
+total_batches: 7
+total_features: 27
+new_files: 28
+modified_files: 7
+
+# ─── VIEWPORT BUDGET ────────────────────────────────────────────────────────
+# Sources:
+#   - pipeline-context.yml dom-overlays[0].total_reserved_px = 56   (WolfGamesLogo)
+#   - pipeline-context.yml prime.carry_forward.reserved_bottom_px = 56
+#   - pipeline-context.yml prime.carry_forward.reserved_top_px = 0
+#   - GDD: top ~15% HUD, mid ~70% board, bottom ~15% pause/hint
+#   - Target device: 390×844 portrait (iPhone reference)
+
+viewport_budget:
+  default:
+    # Portrait 390×844. DOM logo occupies bottom 56px.
+    screen_h: 844
+    screen_w: 390
+    dom_reserved_top: 0
+    dom_reserved_bottom: 56        # WolfGamesLogo (src/game/screens/GameScreen.tsx, line 47)
+    hud_top_px: 120                # GPU HUD top band (Evidence Meter + move counter + companion strip)
+    bottom_band_px: 80             # GPU bottom band (pause button + hint button; ≥44px targets)
+    board_height_px: 580           # 844 - 120 - 80 - 56 = 588 → 580 with 4px top+bottom inset
+    board_width_px: 374            # 390 - 8px side padding × 2 = 374
+    # Grid sizing — 7 cols × 9 rows
+    cols: 7
+    rows: 9
+    cell_gap_px: 2
+    cell_size_px: 52               # (374 - 2*6) / 7 = (374 - 12) / 7 = 51.7 → 52px; ≥44 ✓
+    grid_width_px: 376             # 52*7 + 2*6 = 364 + 12 = 376; within 374+2 tolerance ✓
+    grid_height_px: 476            # 52*9 + 2*8 = 468 + 16 = 484 → fits in 580 ✓
+    tile_art_px: 42                # ~80% of 52px cell; ≥24px icon ✓
+    min_touch_target_px: 52        # cell_size ≥ 44 ✓
+    total_gpu_used: 300            # 120 + 80 + 100 (board top inset + grid)
+    note: "cell_size 52px satisfies ≥44px touch target; tile art 42px satisfies ≥24px icon floor"
+  tutorial:
+    # Tutorial level 1: 4-col × 5-row sub-grid shown on the same 7×9 board.
+    # Non-tutorial cells are dimmed. Cell size is identical — no layout change.
+    cols: 4
+    rows: 5
+    cell_size_px: 52               # same as default; board unchanged
+    note: "Tutorial sub-grid uses same board dimensions — only active cell set changes"
+
+# ─── RESOLVED QUESTIONS ─────────────────────────────────────────────────────
+
+resolved_questions:
+  - question: "oq-1: What is the resolved game slug?"
+    decision: "clue-connect"
+    rationale: >
+      GDD refers to 'myscooby' in level generator section but that was an illustrative
+      placeholder. The game title is 'Mystery Inc. Mash: Clue Connect'. Core mechanic
+      is chain-connecting clues. Slug 'clue-connect' is directory-safe (kebab, ≤30 chars),
+      distinct, and descriptive. Game root: src/game/clue-connect/.
+
+  - question: "oq-2: Scooby Snack coin earn rate per level?"
+    decision: "base 10 coins per level + 5 per star earned (max 25 coins/level)"
+    rationale: >
+      GDD does not specify. Core pass needs a concrete number to implement the coin counter
+      on the Level Complete screen and deduct hint/continue costs. Base 10 + star bonus
+      (5×stars) is a standard hypercasual economy that avoids instant saturation (hint=1 coin,
+      continue=5 coins). This value is easily tunable via tuning.ts.
+
+  - question: "oq-3: Watch Ad path — real or mock for core pass?"
+    decision: "mock for core pass; ad SDK integration is meta-pass scope"
+    rationale: >
+      Core pass ships the base game mechanic. Ad integration requires SDK, privacy policy,
+      and store compliance — all meta-pass concerns. Core pass implements the Watch Ad button
+      as a no-op stub that logs 'AD_MOCK' and grants +5 moves directly (as if ad completed).
+      This keeps the loss screen functional and testable without a real SDK.
+
+  - question: "oq-4: Companion portrait rotation logic?"
+    decision: "Scooby always on level-start and win. Chapter-level assignment: Ch1=Velma, Ch2=Shaggy, Ch3=Fred, Ch4=Daphne. Positive chain: thumbs-up expression. Bad state (2 moves left): worried expression."
+    rationale: >
+      GDD specifies Scooby for level-start and unmask lines. Gang member rotation per chapter
+      is the simplest way to keep each character relevant without complex dynamic selection logic.
+      Reaction expressions (positive/worried/neutral) are triggered by ECS events.
+
+  - question: "oq-5: Hint algorithm?"
+    decision: "longest valid chain from current board state (greedy BFS from each cell, pick the chain with most tiles)"
+    rationale: >
+      GDD says hint highlights 'a valid chain'. Longest chain maximizes player reward (more
+      evidence fill) and is the most useful hint. Greedy BFS is O(N*6) where N=63 cells —
+      well within one frame budget. Ties broken by topmost-leftmost starting cell.
+
+# ─── PRESERVE LIST ────────────────────────────────────────────────────────────
+# Additive GDD — existing infrastructure preserved/adapted:
+
+preserve_list:
+  - module: src/game/screens/LoadingScreen.tsx
+    action: reuse
+    reason: "Scaffold loading screen is functional; no GDD-specific changes needed."
+  - module: src/game/screens/ResultsScreen.tsx
+    action: adapt
+    reason: "Shell exists; needs Scooby-Doo branching win/loss content and star animations added."
+  - module: src/game/state.ts
+    action: adapt
+    reason: "Signals preserved; wiring changes to bridge from ECS resources via bridgeEcsToSignals."
+  - module: src/game/asset-manifest.ts
+    action: adapt
+    reason: "Schema and loader infrastructure exist; game-specific bundles added."
+  - module: src/game/mygame-contract.ts
+    action: reuse
+    reason: "GameController contract shape is game-agnostic and reused verbatim."
+  - module: src/game/screens/StartScreen.tsx
+    action: adapt
+    reason: "Routing infrastructure exists; visual content and first-launch routing logic added."
+  - module: src/game/screens/useCompanionDialogue.ts
+    action: adapt
+    reason: "Hook scaffold exists; game-specific dialogue and reaction logic added."
+
+# ─── BATCHES ─────────────────────────────────────────────────────────────────
+# Two-key sort: primary = dependency topology; secondary = P0 < P1 < P2
+# First P0 batch = hook_batch = 1 (board is immediately visible and tappable)
+
+batches:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # BATCH 1 — ECS Foundation + Board Canvas  (P0 — core loop foundation)
+  # "Player can see a 7×9 board filled with 6 clue tile types"
+  # ═══════════════════════════════════════════════════════════════════════════
+  - id: 1
+    name: "ECS Foundation + Board Canvas"
+    priority: P0
+    player_visible: "player sees a 7×9 board grid filled with 6 distinct clue tile types rendered on the GPU canvas; each tile is visually unique with emoji/text fallback"
+
+    features:
+      - ecs-plugin
+      - 7x9-grid-layout
+      - clue-tiles
+      - content-gap-asset-manifest
+
+    cos_covered:
+      - canvas
+      - core-interaction
+      - animated-dynamics
+      - scoring
+
+    ux_zones:
+      thumb_zone: [center]
+      touch_targets: [board-cell]
+      feedback_surfaces: [board, cells, tile-sprite]
+
+    acceptance:
+      # ecs-plugin
+      - given: "game initializes"
+        should: "ECS DB is created from ClueConnectPlugin; setActiveDb is called; bridgeEcsToSignals wires score/level/movesRemaining/evidenceMeterValue/starsEarned to DOM signals"
+      # 7x9-grid-layout
+      - given: "game screen mounts on 390×844 viewport"
+        should: "board renders 7 columns × 9 rows at 52px cell size; all cells visible within bounds; no overlap with DOM logo (bottom 56px)"
+      # clue-tiles
+      - given: "board is initialized with random clue tiles"
+        should: "all 6 tile types appear (Footprint, Magnifying Glass, Flashlight, Fingerprint, Rope, Scooby Snack); each is visually distinct via emoji/text or tinted sprite"
+      # content-gap-asset-manifest
+      - given: "game bundle loads"
+        should: "asset-manifest.ts exports scene-clue-connect bundle declaration; manifest schema validation passes"
+
+    test_loci:
+      - describe: "ECS plugin — ClueConnectPlugin"
+        file: "tests/game/clue-connect/ClueConnectPlugin.test.ts"
+        cases:
+          - "ECS DB created from plugin; setActiveDb called"
+          - "bridgeEcsToSignals wires score resource to gameState.setScore"
+          - "board entities created for all 63 cells on init"
+      - describe: "board layout — 7×9 grid"
+        file: "tests/game/clue-connect/BoardRenderer.test.ts"
+        cases:
+          - "board renders 7 cols × 9 rows; cell count equals 63"
+          - "cell size is 52px; grid fits within 374px board width"
+          - "board bottom edge does not exceed screen height minus 136px reserved (56 DOM + 80 GPU bottom)"
+      - describe: "clue tiles — visual identity"
+        file: "tests/game/clue-connect/TileRenderer.test.ts"
+        cases:
+          - "all 6 tile types have distinct visual representation"
+          - "tile fallback is emoji/text when atlas unavailable"
+      - describe: "asset manifest — bundle schema"
+        file: "tests/game/clue-connect/asset-manifest.test.ts"
+        cases:
+          - "scene-clue-connect bundle declared in manifest"
+          - "bundle prefix matches scene-* pattern"
+
+    files:
+      state:
+        - src/game/clue-connect/ClueConnectPlugin.ts
+        - src/game/clue-connect/state/types.ts
+        - src/game/clue-connect/state/bridgeEcsToSignals.ts
+        - src/game/clue-connect/entities/TileEntity.ts
+        - src/game/clue-connect/config/layout.ts
+      integration:
+        - src/game/clue-connect/index.ts
+        - src/game/clue-connect/renderers/BoardRenderer.ts
+        - src/game/clue-connect/renderers/TileRenderer.ts
+        - src/game/asset-manifest.ts
+      test:
+        - tests/game/clue-connect/ClueConnectPlugin.test.ts
+        - tests/game/clue-connect/BoardRenderer.test.ts
+        - tests/game/clue-connect/TileRenderer.test.ts
+        - tests/game/clue-connect/asset-manifest.test.ts
+
+    how:
+      - "Create ClueConnectPlugin.ts with ECS schema: board cell entities (row, col, tileKind, tileId), resources (score, movesRemaining, evidenceMeterValue, starsEarned, boardPhase, snoopCoins), archetypes (Block), transactions (replaceBoard, addScore, decrementMoves, setPhase, addCoins), actions (initBoard)"
+      - "Create layout.ts with LAYOUT constants derived from viewport budget: CELL_SIZE=52, COLS=7, ROWS=9, HUD_H=120, BOTTOM_BAND_H=80, BOARD_W=374, BOARD_OFFSET_Y=120"
+      - "Create BoardRenderer.ts: init(container, layout) creates 63 cell containers in a 7×9 grid; TileRenderer.ts: renders each tile type with emoji/text fallback (no atlas yet); wire both from index.ts entry point"
+
+    risk: HIGH
+    risk_reason: "ECS plugin creation + Pixi app init + board renderer all wired together; wrong init order silently breaks rendering or ECS→signal reactivity. If ECS created after app.init, setActiveDb must still precede bridgeEcsToSignals."
+    risk_verify: "After batch: confirm board renders 63 cells on screen; confirm ECS Inspector shows board entities; confirm score signal updates when ECS resource changes."
+    risk_rollback: "If ECS→Pixi wiring breaks: revert index.ts to DOM stub; keep ClueConnectPlugin.ts in isolation while debugging init order."
+
+    definition_of_done:
+      - "acceptance[] tests go red then green (all 8 cases)"
+      - "integration call sites exist at files.integration (BoardRenderer.init called in index.ts)"
+      - "CoS sub-walk clean for canvas (cells ≥44px, 6 types visually distinct), core-interaction (board renders, no DOM in mygame/), animated-dynamics (tile IDs stable), scoring (ECS resource schema has 2+ dimensions)"
+      - "touch targets: cell_size 52px ≥ 44px ✓; emoji/text fallback readable at 42px ✓"
+      - "bun run build + bun run test:run pass within 3 fix cycles"
+      - "no <game-root> literal in any file path"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # BATCH 2 — Tap-and-Drag Chain Interaction + State Machine  (P0)
+  # "Player can drag to connect tiles; chain clears on finger-up"
+  # ═══════════════════════════════════════════════════════════════════════════
+  - id: 2
+    name: "Tap-and-Drag Chain Interaction + State Machine"
+    priority: P0
+    player_visible: "player drags finger across matching adjacent tiles; a glowing chain trail follows; releasing with 2+ tiles clears them and the board phase transitions correctly; single-tile lift cancels silently"
+
+    features:
+      - tap-drag-chain-interaction
+      - board-state-machine
+      - gravity-fill-system
+
+    cos_covered:
+      - core-interaction
+      - animated-dynamics
+
+    ux_zones:
+      thumb_zone: [center]
+      touch_targets: [board-cell]
+      feedback_surfaces: [chain-trail, tile-selection-highlight, board, falling-tiles, spawn-animation]
+
+    acceptance:
+      # tap-drag-chain-interaction
+      - given: "player drags finger from one tile to an orthogonally or diagonally adjacent same-type tile"
+        should: "both tiles are added to the chain; chain trail renders behind the finger; tiles highlight"
+      - given: "player releases with 1 tile selected"
+        should: "chain cancels silently; no move consumed; board returns to IDLE; no visible state change"
+      - given: "player releases with 2+ tiles selected"
+        should: "chain confirms; tiles clear; board state transitions to ANIMATING; one move is consumed"
+      # board-state-machine
+      - given: "board is in ANIMATING state"
+        should: "new pointer input is queued (not discarded); queued input fires when ANIMATING ends"
+      - given: "moves reach 0 and evidenceMeterValue < evidenceTarget"
+        should: "board transitions to LOST; input is gated (no further moves accepted); board dims to 60% opacity"
+      # gravity-fill-system
+      - given: "tiles are cleared from the board"
+        should: "tiles above fall downward at 80ms per cell; new tiles spawn above visible grid and fall in; stable tile IDs preserved for existing tiles that fall (not destroyed and recreated)"
+
+    test_loci:
+      - describe: "chain input — ChainInputHandler"
+        file: "tests/game/clue-connect/ChainInputHandler.test.ts"
+        cases:
+          - "drag adds adjacent same-type tile to chain"
+          - "drag to non-adjacent tile does not extend chain"
+          - "single-tile lift cancels silently; no move consumed"
+          - "2+ tile release confirms chain; move decremented"
+          - "input queued during ANIMATING state"
+      - describe: "board state machine"
+        file: "tests/game/clue-connect/ClueConnectPlugin.test.ts"
+        cases:
+          - "state transitions: IDLE → SELECTING → ANIMATING → IDLE"
+          - "LOST transition when movesRemaining reaches 0 and evidence not met"
+          - "WON transition when evidenceMeterValue >= evidenceTarget"
+      - describe: "gravity fill system"
+        file: "tests/game/clue-connect/gravityLogic.test.ts"
+        cases:
+          - "cleared cells cause tiles above to fall; stable IDs preserved"
+          - "empty cells after fall filled with new tiles from above"
+          - "board diff produces only moved tiles in animation list"
+
+    files:
+      state:
+        - src/game/clue-connect/input/ChainInputHandler.ts
+        - src/game/clue-connect/state/gravityLogic.ts
+        - src/game/clue-connect/state/ClueConnectPlugin.ts
+      integration:
+        - src/game/clue-connect/renderers/ChainRenderer.ts
+        - src/game/clue-connect/renderers/TileRenderer.ts
+        - src/game/clue-connect/screens/gameController.ts
+      test:
+        - tests/game/clue-connect/ChainInputHandler.test.ts
+        - tests/game/clue-connect/gravityLogic.test.ts
+        - tests/game/clue-connect/ClueConnectPlugin.test.ts
+
+    how:
+      - "Write ChainInputHandler.ts: listen to pointertap/pointermove on board container; maintain chain array (tileId, row, col, kind); validate adjacency (Chebyshev distance ≤1) and same-kind; unwind support (cross-back removes last tile); on pointerup dispatch db.actions.executeChain or cancel"
+      - "Extend ClueConnectPlugin.ts: add boardPhase resource (IDLE/SELECTING/ANIMATING/WON/LOST/PAUSED); add transactions (setPhase, replaceBoard with board-diff metadata, decrementMoves); add action executeChain returning {cleared, movements, refills}"
+      - "Write gravityLogic.ts: pure function boardAfterGravity(board, clearedIds) → {newBoard, movements}; no Math.random; new tile kinds provided via seeded RNG passed in; board-diff approach: only moved tiles in animation list"
+
+    risk: HIGH
+    risk_reason: "Primary interaction: pointer capture, touch-action:none on board container, input queueing during ANIMATING, chain unwind must all work on mobile. Missing any breaks gameplay silently."
+    risk_verify: "After batch: drag test on simulator; confirm single-tile cancel does not consume move; confirm gravity produces only moved-tile animations (no whole-board flash)."
+    risk_rollback: "If pointer events fail: add 'touch-action: none; user-select: none' CSS to board container; fall back to pointerdown/pointermove/pointerup if pointertap does not fire during drag."
+
+    definition_of_done:
+      - "acceptance[] tests go red then green (all 6 cases)"
+      - "integration call site: ChainInputHandler.init called in gameController.ts; ChainRenderer.init called in gameController.ts"
+      - "CoS sub-walk: core-interaction (one-gesture rule, visible rejection on 1-tile cancel is silent per spec — confirmed per GDD), animated-dynamics (stable IDs, board-diff, no instant clears)"
+      - "touch targets: board cells 52px ≥44px; chain trail renders within 100ms of drag start"
+      - "bun run build + bun run test:run pass within 3 fix cycles"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # BATCH 3 — HUD Layout + Evidence Meter + Move Counter  (P0)
+  # "Player can see their progress and move count update in real time"
+  # ═══════════════════════════════════════════════════════════════════════════
+  - id: 3
+    name: "HUD Layout + Evidence Meter + Move Counter"
+    priority: P0
+    player_visible: "player sees the Evidence Meter fill proportionally with each chain clear; move counter in top-right decrements after each confirmed chain; HUD does not overlap the board or DOM logo"
+
+    features:
+      - hud-layout
+      - evidence-meter
+      - move-counter
+      - scoring-formula
+
+    cos_covered:
+      - canvas
+      - core-interaction
+      - scoring
+
+    ux_zones:
+      thumb_zone: [out-of-reach]
+      touch_targets: []
+      feedback_surfaces: [hud, evidence-meter-bar, move-counter-display]
+
+    acceptance:
+      # hud-layout
+      - given: "game screen mounts on 390×844"
+        should: "HUD occupies top 120px; board starts at y=120; bottom band at y=764 (844-80); HUD elements do not overlap board or DOM logo"
+      # evidence-meter
+      - given: "player clears a chain of N tiles"
+        should: "evidenceMeterValue increases proportionally to chain length; meter bar width updates visually within one frame; shimmer pulse plays when meter reaches 100%"
+      # move-counter
+      - given: "player confirms a valid chain"
+        should: "movesRemaining decrements by 1; display updates immediately; counter flashes red 2× (300ms) when reaching 0"
+      # scoring-formula
+      - given: "player clears a chain"
+        should: "score increases by chain-length-based formula (longer chain = higher score and more evidence fill); starsEarned computed as 1/2/3 based on evidenceTarget overflow (0%/10%/25%)"
+
+    test_loci:
+      - describe: "HUD renderer — layout bounds"
+        file: "tests/game/clue-connect/HudRenderer.test.ts"
+        cases:
+          - "HUD height is 120px; board y-offset is 120px"
+          - "bottom band at y=764; height=80px; no overlap with DOM logo (reserved 56px)"
+          - "evidence meter bar visible in HUD top-center"
+          - "move counter visible in HUD top-right"
+      - describe: "evidence meter — scoring formula"
+        file: "tests/game/clue-connect/scoringLogic.test.ts"
+        cases:
+          - "chain of 2 tiles fills meter less than chain of 5 tiles (multiplicative)"
+          - "evidenceMeterValue >= evidenceTarget triggers WON"
+          - "starsEarned=1 at 0% overflow; starsEarned=2 at 10% overflow; starsEarned=3 at 25%+ overflow"
+          - "move counter decrements to 0 triggers LOST when meter not full"
+
+    files:
+      state:
+        - src/game/clue-connect/state/scoringLogic.ts
+        - src/game/clue-connect/state/ClueConnectPlugin.ts
+      integration:
+        - src/game/clue-connect/renderers/HudRenderer.ts
+        - src/game/clue-connect/config/layout.ts
+        - src/game/clue-connect/screens/gameController.ts
+      test:
+        - tests/game/clue-connect/HudRenderer.test.ts
+        - tests/game/clue-connect/scoringLogic.test.ts
+
+    how:
+      - "Create HudRenderer.ts: init(container, layout) creates top band (120px) with Evidence Meter bar (top-center), move counter text (top-right), chapter name text (top-left); wire update(state) to sync values; meter bar width = (evidenceMeterValue / evidenceTarget) * meterWidth; shimmer tween when value hits 100%"
+      - "Create scoringLogic.ts: pure functions evidenceFillAmount(chainLength) → number, computeStars(value, target) → 1|2|3, computeScore(chainLength, movesUsed) → number; no Math.random; exported and imported by ClueConnectPlugin transactions"
+      - "Extend ClueConnectPlugin.ts: add transaction addEvidence(chainLength); update addScore with multiplier; update executeChain action to call scoringLogic functions and return evidenceDelta, newStars"
+
+    risk: HIGH
+    risk_reason: "HUD adds new UI element to viewport; must not overlap board or DOM logo. Viewport budget is computed from greenfield defaults — verify against actual render output."
+    risk_verify: "Screenshot at 390×844: HUD top band ≤120px; board starts at y=120; bottom band starts at y=764; DOM logo at bottom 56px not obscured by GPU elements."
+    risk_rollback: "If HUD overlaps board: reduce hud_top_px from 120 to 100 and recompute grid; update layout.ts constants."
+
+    definition_of_done:
+      - "acceptance[] tests go red then green (all 4 cases)"
+      - "HudRenderer.init called in gameController.ts; scoringLogic functions imported in ClueConnectPlugin.ts"
+      - "CoS sub-walk: canvas (HUD ≤120px, no overlap with board at y=120; meter bar ≥24px wide), scoring (2 multiplicative dimensions: chain length × evidence fill; star threshold formula)"
+      - "feedback surfaces: meter updates within 1 frame of chain clear; move counter flash on 0"
+      - "bun run build + bun run test:run pass within 3 fix cycles"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # BATCH 4 — Win/Loss Sequences + Results Screen Content  (P0)
+  # "Player can win or lose a level and see the correct outcome screen"
+  # ═══════════════════════════════════════════════════════════════════════════
+  - id: 4
+    name: "Win/Loss Sequences + Results Screen Content"
+    priority: P0
+    player_visible: "when evidence meter fills, win sequence plays (meter shimmer → Scooby bark → screen slides in → stars animate → coin counter → Next Level button); when moves run out, loss sequence plays (move counter flash → meter shake → board dims → screen slides in → Try Again + Watch Ad buttons appear)"
+
+    features:
+      - win-loss-sequences
+      - content-gap-results-screens
+      - star-rating
+      - scooby-snack-coins
+
+    cos_covered:
+      - animated-dynamics
+      - scoring
+
+    ux_zones:
+      thumb_zone: [center]
+      touch_targets: [next-level-button, try-again-button, watch-ad-button]
+      feedback_surfaces: [evidence-meter, companion-strip, results-screen, star-display]
+
+    acceptance:
+      # win-loss-sequences
+      - given: "board transitions to WON"
+        should: "win sequence plays in order: meter shimmer (400ms) → companion bark/jump (600ms) → results screen slides in from bottom (300ms) → stars animate one by one (200ms each) → coin counter ticks up (400ms) → Next Level button appears (200ms)"
+      - given: "board transitions to LOST"
+        should: "loss sequence plays: move counter flashes red (300ms, 2 pulses) → meter shakes (200ms) → Shaggy droops (500ms) → board dims to 60% opacity (300ms) → screen slides in (300ms) → Watch Ad button and Try Again button appear (200ms)"
+      # content-gap-results-screens
+      - given: "win results screen is shown"
+        should: "screen shows 'Clue collected!' banner; star rating (1–3 stars); Scooby happy dance animation; coin tally; Next Level button (center bottom); Chapter Map button (secondary)"
+      - given: "loss results screen is shown"
+        should: "screen shows 'So close, gang!' banner (never 'Game Over'); Watch Ad (+5 moves) and Try Again buttons; Watch Ad mock grants +5 moves directly and restarts same board"
+      # star-rating
+      - given: "level completes with 0% evidence overflow"
+        should: "starsEarned=1; one star animates in on results screen"
+      # scooby-snack-coins
+      - given: "level completes"
+        should: "snoopCoins resource increases by (10 + 5 * starsEarned); coin counter on results screen ticks up to new total over 400ms"
+
+    test_loci:
+      - describe: "win/loss sequences — animation order"
+        file: "tests/game/clue-connect/WinLossSequence.test.ts"
+        cases:
+          - "WON transition triggers win sequence in correct order"
+          - "LOST transition triggers loss sequence in correct order"
+          - "Watch Ad mock grants +5 moves and resets board to IDLE"
+      - describe: "results screen — content branching"
+        file: "tests/game/clue-connect/ResultsScreen.test.ts"
+        cases:
+          - "win path shows 'Clue collected!' banner; 3 star slots rendered"
+          - "loss path shows 'So close, gang!' banner; no 'Game Over' text"
+          - "coin counter ticks from previous total to new total"
+
+    files:
+      state:
+        - src/game/clue-connect/state/ClueConnectPlugin.ts
+      integration:
+        - src/game/clue-connect/screens/gameController.ts
+        - src/game/screens/ResultsScreen.tsx
+      test:
+        - tests/game/clue-connect/WinLossSequence.test.ts
+        - tests/game/clue-connect/ResultsScreen.test.ts
+
+    how:
+      - "Extend gameController.ts: add winSequence() and lossSequence() async functions using GSAP delayedCall chains matching GDD-specified durations; on complete call goto('results') with win/loss payload"
+      - "Update ResultsScreen.tsx: branch on win/loss payload; win path renders 'Clue collected!' banner, star slots, coin counter, Next Level + Chapter Map buttons; loss path renders 'So close, gang!', Watch Ad (mock: log AD_MOCK + grant +5 moves) + Try Again buttons"
+      - "Extend ClueConnectPlugin.ts: add addCoins(amount) transaction; bridgeEcsToSignals adds snoopCoins → gameState.snoopCoins signal"
+
+    risk: MEDIUM
+    risk_reason: "Animation sequence timing must match GDD spec; ResultsScreen touches DOM and requires correct SolidJS signal flow from ECS bridge."
+    risk_verify: "Play through one win and one loss; confirm banner text, sequence durations (use GSAP timeline labels), coin tally."
+    risk_rollback: "If results screen signal flow breaks: trace bridgeEcsToSignals snoopCoins subscription; confirm cleanupObserve called in gameController destroy."
+
+    definition_of_done:
+      - "acceptance[] tests go red then green (all 6 cases)"
+      - "winSequence/lossSequence call sites in gameController.ts; ResultsScreen.tsx reads win/loss payload"
+      - "CoS sub-walk: animated-dynamics (GSAP delayedCall chains, no setTimeout; all board-state transitions animated; stable timing), scoring (coin earn formula applied, star threshold formula applied)"
+      - "touch targets: Next Level, Try Again, Watch Ad buttons ≥44×44px; in bottom thumb zone"
+      - "bun run build + bun run test:run pass within 3 fix cycles"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # BATCH 5 — Game Controller Integration + Level Generator  (P0)
+  # "Player can play a complete level end-to-end"
+  # ═══════════════════════════════════════════════════════════════════════════
+  - id: 5
+    name: "Game Controller Integration + Level Generator"
+    priority: P0
+    player_visible: "game controller fully wires ECS DB, Pixi app, all renderers, and input routing; level generator creates a solvable 7×9 board; player can play, win, or lose a complete level; retry loads a fresh board"
+
+    features:
+      - game-controller
+      - level-generator
+
+    cos_covered:
+      - core-interaction
+      - animated-dynamics
+      - scoring
+
+    ux_zones:
+      thumb_zone: [center]
+      touch_targets: [game-board]
+      feedback_surfaces: [board, hud, companion-strip]
+
+    acceptance:
+      # game-controller
+      - given: "setupGame() is called"
+        should: "ECS DB created from ClueConnectPlugin → setActiveDb(db) → bridgeEcsToSignals(db) → Pixi app.init() → layers created (bg, board, hud, ui) → renderers instantiated with layers and layout bounds → ChainInputHandler wired to board container"
+      - given: "game controller destroy() is called"
+        should: "GSAP tweens killed → Pixi app destroyed → cleanupObserve called → setActiveDb(null) → ecsDb = null"
+      # level-generator
+      - given: "level is generated for chapter 1 level 1 (seed=(1*10000)+(1*100)+7331=17431)"
+        should: "board is solvable (greedy solver finds at least 1 valid chain within 10 moves); 7×9 board with 6 tile types returned; seeded RNG used (no Math.random)"
+      - given: "generated board fails solvability validator"
+        should: "generator retries with seed+1 up to 10 times; falls back to fallback-levels.json if all retries fail"
+
+    test_loci:
+      - describe: "game controller — init/destroy lifecycle"
+        file: "tests/game/clue-connect/GameController.test.ts"
+        cases:
+          - "init order: ECS DB → setActiveDb → bridgeEcsToSignals → Pixi app.init → renderers"
+          - "destroy order: GSAP tweens → Pixi app → cleanupObserve → setActiveDb(null)"
+      - describe: "level generator — solvability"
+        file: "tests/game/clue-connect/LevelGenerator.test.ts"
+        cases:
+          - "chapter 1 level 1 seed generates solvable board"
+          - "solvability validator rejects board with no valid chain"
+          - "fallback triggered after 10 retry failures"
+          - "seeded RNG produces deterministic output (same seed = same board)"
+
+    files:
+      state:
+        - src/game/clue-connect/levelgen/LevelGenerator.ts
+        - src/game/clue-connect/levelgen/SolvabilityValidator.ts
+        - src/game/clue-connect/levelgen/SeededRng.ts
+        - src/game/clue-connect/data/handcrafted-levels.json
+        - src/game/clue-connect/data/fallback-levels.json
+      integration:
+        - src/game/clue-connect/screens/gameController.ts
+        - src/game/clue-connect/index.ts
+      test:
+        - tests/game/clue-connect/GameController.test.ts
+        - tests/game/clue-connect/LevelGenerator.test.ts
+
+    how:
+      - "Rebuild gameController.ts to the full GameController contract: init() follows the 4-step wiring sequence (ECS → Pixi → renderers → input); destroy() follows the correct teardown order; wire win/loss sequence dispatchers from batch 4; wire ChainInputHandler to board container pointertap/pointermove/pointerup"
+      - "Create LevelGenerator.ts: seed formula (chapterIndex*10000 + levelIndex*100 + 7331); SeededRng.ts (mulberry32 or xoshiro128); SolvabilityValidator.ts (greedy solver, 10K iteration cap, 6 rejection conditions); fallback chain: procedural → fallback-levels.json → hard-coded emergency board"
+      - "Create handcrafted-levels.json with tutorial levels 1–2 (pre-solved boards); create fallback-levels.json with 5 diverse solvable boards"
+
+    risk: HIGH
+    risk_reason: "GameController is the central integration point — wrong ECS/Pixi init order silently breaks rendering or signal reactivity. All batches 1–4 must be functional before this batch compiles cleanly."
+    risk_verify: "Play through level start → chain → win or lose → results → retry; confirm ECS Inspector shows correct resource values throughout."
+    risk_rollback: "If Pixi/ECS init order breaks: add explicit await app.init() before createDatabase; ensure bridgeEcsToSignals is called inside the ticker.addOnce callback post-resize."
+
+    definition_of_done:
+      - "acceptance[] tests go red then green (all 4 cases)"
+      - "setupGame and setupStartScreen exported from src/game/clue-connect/index.ts per GameController contract"
+      - "CoS sub-walk: core-interaction (full chain cycle works end-to-end), animated-dynamics (no instant board resets), scoring (level can be won with 1–3 stars)"
+      - "player can complete level 1 of chapter 1 (win path verified manually)"
+      - "bun run build + bun run test:run pass within 3 fix cycles"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # BATCH 6 — Tutorial Levels + Start Screen + Chapter Flow  (P1)
+  # "Player experiences guided onboarding from first launch"
+  # ═══════════════════════════════════════════════════════════════════════════
+  - id: 6
+    name: "Tutorial Levels + Start Screen + Chapter Flow Screens"
+    priority: P1
+    player_visible: "on first launch player sees title screen then intro cutscene then tutorial level 1 (4×5 sub-grid, ghost-finger, dimmed tiles, forced success); tutorial level 2 introduces full board; chapter start interstitial and villain unmask screen appear between chapters"
+
+    features:
+      - tutorial-levels
+      - start-screen
+      - chapter-flow-screens
+      - first-time-intro-cutscene
+      - companion-system
+
+    cos_covered:
+      - core-interaction
+      - canvas
+
+    ux_zones:
+      thumb_zone: [center]
+      touch_targets: [board-cell, skip-button, investigate-button, play-button, advance-button]
+      feedback_surfaces: [board, guidance-overlay, speech-bubble, companion-strip, comic-panels, location-illustration]
+
+    acceptance:
+      # tutorial-levels
+      - given: "player opens game for the first time (first-launch flag true)"
+        should: "tutorial level 1 loads: 4×5 sub-grid visible, non-selectable tiles dimmed, ghost-finger overlay shows correct drag direction, only valid chain is highlighted; valid chain success is forced"
+      - given: "player completes tutorial level 1"
+        should: "tutorial level 2 loads: full 7×9 board, Evidence Meter visible, move counter visible, Shaggy speech bubble appears"
+      # start-screen
+      - given: "returning player opens game"
+        should: "start screen shows Scooby-Doo logo, Mystery Machine illustration, Play button; tapping Play navigates to game without tutorial"
+      # first-time-intro-cutscene
+      - given: "first-time player taps Play"
+        should: "intro cutscene plays: 5–7 comic panels, tap-to-advance, Skip button appears after 2s; completing intro routes to tutorial level 1"
+      # chapter-flow-screens
+      - given: "all levels in a chapter are completed"
+        should: "chapter complete screen shows animated villain unmask, chapter star total, Next Mystery button (skippable after 3s)"
+      # companion-system
+      - given: "level starts"
+        should: "companion portrait visible in HUD companion reaction area; Scooby delivers level-start line; chapter-appropriate gang member shown (Ch1=Velma, Ch2=Shaggy)"
+
+    test_loci:
+      - describe: "tutorial overlay — level 1 constraints"
+        file: "tests/game/clue-connect/TutorialOverlay.test.ts"
+        cases:
+          - "tutorial level 1 dims non-selectable tiles; only highlighted chain tiles accept input"
+          - "ghost-finger overlay renders at correct board position"
+          - "tutorial level 2 shows full 7×9 board; Shaggy speech bubble fires on Evidence Meter"
+      - describe: "start screen — routing"
+        file: "tests/game/clue-connect/StartScreen.test.ts"
+        cases:
+          - "first-launch routes to intro cutscene on Play tap"
+          - "returning player routes directly to game on Play tap"
+      - describe: "companion system — dialogue triggers"
+        file: "tests/game/clue-connect/CompanionRenderer.test.ts"
+        cases:
+          - "level-start fires Scooby dialogue line"
+          - "chapter 1 shows Velma portrait; chapter 2 shows Shaggy portrait"
+          - "positive chain fires positive reaction expression"
+
+    files:
+      state:
+        - src/game/clue-connect/data/handcrafted-levels.json
+        - src/game/clue-connect/state/ClueConnectPlugin.ts
+      integration:
+        - src/game/clue-connect/levelgen/TutorialOverlay.ts
+        - src/game/clue-connect/renderers/CompanionRenderer.ts
+        - src/game/clue-connect/screens/ChapterInterstitial.tsx
+        - src/game/clue-connect/screens/VillainUnmask.tsx
+        - src/game/clue-connect/screens/IntroScreen.tsx
+        - src/game/screens/StartScreen.tsx
+        - src/game/screens/useCompanionDialogue.ts
+        - src/game/clue-connect/screens/gameController.ts
+      test:
+        - tests/game/clue-connect/TutorialOverlay.test.ts
+        - tests/game/clue-connect/StartScreen.test.ts
+        - tests/game/clue-connect/CompanionRenderer.test.ts
+
+    how:
+      - "Create TutorialOverlay.ts: GPU layer rendered above board; maintains set of 'allowed cells'; dims non-allowed cells to 40% alpha; renders ghost-finger sprite (emoji fallback) at target position; speech bubble rendered as Pixi Text container; tutorial 1 uses handcrafted-levels.json[0] with forced-success flag"
+      - "Update StartScreen.tsx: add Scooby-Doo logo (text fallback: 'Mystery Inc. Mash'), Mystery Machine (emoji fallback: '🚐'), Scooby peek animation (GSAP bounce); wire first-launch flag check (localStorage key 'clue-connect-first-launch') to route to intro vs game"
+      - "Create CompanionRenderer.ts: portrait container in HUD companion strip (60×60px emoji fallback); dialogue text rendered as GPU Text; reaction expressions swapped via tint/texture; wire to ECS events (chainCleared → positive, movesLow → worried)"
+
+    risk: MEDIUM
+    risk_reason: "Multiple new screens and GPU overlay interacting with existing game flow; first-launch routing logic depends on localStorage which may behave differently in test vs browser environments."
+    risk_verify: "Fresh profile flow: open → intro cutscene → tutorial 1 → tutorial 2 → level 1 → chapter start interstitial. Returning player: open → start screen → game."
+    risk_rollback: "If first-launch localStorage flag causes test flakiness, use an injectable flag service."
+
+    definition_of_done:
+      - "acceptance[] tests go red then green (all 6 cases)"
+      - "TutorialOverlay.init called in gameController.ts for tutorial levels; CompanionRenderer.init called in gameController.ts"
+      - "CoS sub-walk: core-interaction (tutorial 1 only valid chain accepts input; Skip button ≥44px in tutorial screens), canvas (companion portrait ≥44px; speech bubble readable ≥16px text)"
+      - "onboarding path is seamless (no modal tutorial; teaches inside gameplay)"
+      - "bun run build + bun run test:run pass within 3 fix cycles"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # BATCH 7 — Pause/Hint + Mystery Box + Blocker Tiles  (P1)
+  # "Player can pause, use a hint, and encounter mystery box and blocker tiles"
+  # ═══════════════════════════════════════════════════════════════════════════
+  - id: 7
+    name: "Pause, Hint, Mystery Box, and Blocker Tiles"
+    priority: P1
+    player_visible: "pause button locks board and opens overlay; hint button highlights the longest valid chain (costs 1 Scooby Snack coin); Mystery Box spawns after 5+ chain and grants +2 moves; Red Herring, Cobweb, and Locked Door blockers appear in later chapter levels with appropriate visual feedback and clearing mechanics"
+
+    features:
+      - pause-and-hint-buttons
+      - mystery-box-tile
+      - red-herring-blocker
+      - cobweb-blocker
+      - locked-door-blocker
+      - trap-door-cell
+
+    cos_covered:
+      - core-interaction
+      - animated-dynamics
+      - canvas
+
+    ux_zones:
+      thumb_zone: [center]
+      touch_targets: [pause-button, hint-button, board-cell]
+      feedback_surfaces: [bottom-band, board, tile-sprite, move-counter, column-tiles]
+
+    acceptance:
+      # pause-and-hint-buttons
+      - given: "player taps pause button"
+        should: "board transitions to PAUSED; input gated; pause overlay appears; board content preserved; resuming returns to IDLE"
+      - given: "player taps hint button with ≥1 Scooby Snack coin"
+        should: "longest valid chain highlighted (BFS greedy algorithm); 1 coin deducted; highlighted tiles glow for 2s; no hint shown if 0 coins"
+      # mystery-box-tile
+      - given: "player clears a chain of 5+ tiles"
+        should: "Mystery Box spawns at center of cleared chain; displays wooden crate emoji '📦?'; counts as any tile type in subsequent chains"
+      - given: "Mystery Box is included in a chain"
+        should: "+2 moves added to movesRemaining; +2 move counter animation plays"
+      # red-herring-blocker
+      - given: "player attempts to chain through a Red Herring tile"
+        should: "Red Herring rejects with shake animation; chain cannot include Red Herring; 'escape' pop + laugh animation when last adjacent tile cleared"
+      # cobweb-blocker
+      - given: "a Cobweb overlays a tile"
+        should: "trapped tile is un-selectable; web dissolves and tile freed when matching tile type cleared in adjacent chain"
+      # locked-door-blocker
+      - given: "a Locked Door is on the board and Key tile has not been matched"
+        should: "Locked Door cell blocks chain through it; Key tile falls from top at level start; matching Key in any 2+ chain unlocks the door with animation"
+      # trap-door-cell
+      - given: "a tile in a Trap Door cell is cleared"
+        should: "all tiles above that cell drop an extra row at 60ms/cell after normal gravity; hatch flip animation plays on the cell"
+
+    test_loci:
+      - describe: "pause and hint — board state"
+        file: "tests/game/clue-connect/PauseHint.test.ts"
+        cases:
+          - "pause transitions to PAUSED; resume returns to IDLE"
+          - "hint with 0 coins shows no hint"
+          - "hint deducts 1 coin and highlights longest chain for 2s"
+      - describe: "Mystery Box — spawn and wildcard"
+        file: "tests/game/clue-connect/SpecialTileEntity.test.ts"
+        cases:
+          - "5+ chain triggers Mystery Box spawn at chain center"
+          - "Mystery Box in chain adds +2 moves"
+          - "Mystery Box matches any tile type"
+      - describe: "blocker tiles — Red Herring, Cobweb, Locked Door, Trap Door"
+        file: "tests/game/clue-connect/BlockerEntity.test.ts"
+        cases:
+          - "Red Herring rejects chain inclusion; shake animation fires"
+          - "Red Herring clears when all 4 orthogonal adjacent tiles cleared in single move"
+          - "Cobweb traps tile; adjacent same-type chain frees it"
+          - "Locked Door cleared by Key tile in 2+ chain"
+          - "Trap Door cell triggers extra column drop after gravity"
+
+    files:
+      state:
+        - src/game/clue-connect/entities/SpecialTileEntity.ts
+        - src/game/clue-connect/entities/BlockerEntity.ts
+        - src/game/clue-connect/entities/KeyTileEntity.ts
+        - src/game/clue-connect/state/gravityLogic.ts
+        - src/game/clue-connect/state/ClueConnectPlugin.ts
+      integration:
+        - src/game/clue-connect/renderers/HudRenderer.ts
+        - src/game/clue-connect/renderers/TileRenderer.ts
+        - src/game/clue-connect/renderers/BoardRenderer.ts
+        - src/game/clue-connect/screens/gameController.ts
+      test:
+        - tests/game/clue-connect/PauseHint.test.ts
+        - tests/game/clue-connect/SpecialTileEntity.test.ts
+        - tests/game/clue-connect/BlockerEntity.test.ts
+
+    how:
+      - "Add pause button (bottom-left, 44px+) and hint button (bottom-right, 44px+) to HudRenderer bottom band; pause triggers db.transactions.setPhase('PAUSED'); hint runs BFS greedy longest-chain finder (O(N×6)) and renders glow tween on chain tiles for 2s; deduct 1 coin via db.transactions.addCoins(-1)"
+      - "Create SpecialTileEntity.ts: MysteryBox kind with wildcard matching logic; spawn rule: 5+ chain → insert at chain center column × middle row; KeyTile kind: falls under gravity; add Mystery Box + Key handling to ChainInputHandler and gravityLogic"
+      - "Create BlockerEntity.ts: RedHerring (immovable, no gravity, 4-orthogonal-adjacent clear rule), Cobweb (overlay property on tile entity, adjacent-same-type-chain free rule), LockedDoor (single-cell obstacle, cleared by Key chain match); extend gravityLogic for TrapDoor cell property (extra column drop); add emoji/text fallback visuals for each"
+
+    risk: MEDIUM
+    risk_reason: "Multiple blocker types with overlapping interaction rules; blocker logic must integrate cleanly with ChainInputHandler adjacency validation and gravity system without regression."
+    risk_verify: "Per-blocker manual play test: Red Herring shake, Cobweb dissolve, Locked Door unlock animation, Trap Door cascade animation. Confirm Mystery Box wildcard matching."
+    risk_rollback: "If blocker logic conflicts with chain adjacency: add explicit 'isBlocked' predicate to ChainInputHandler.canExtendChain(); Red Herring and LockedDoor always return false from this predicate."
+
+    definition_of_done:
+      - "acceptance[] tests go red then green (all 9 cases)"
+      - "Pause/hint buttons rendered in HudRenderer bottom band; blocker entities wired in ChainInputHandler and TileRenderer"
+      - "CoS sub-walk: core-interaction (pause/resume works, hint highlights valid chain, blocker rejection visible), animated-dynamics (Red Herring shake, Cobweb dissolve, Key unlock, Trap Door cascade all animated with GSAP), canvas (blocker sprites visually distinct; Mystery Box distinct emoji)"
+      - "touch targets: pause 44px+ bottom-left, hint 44px+ bottom-right; both in thumb-natural zone"
+      - "bun run build + bun run test:run pass within 3 fix cycles"

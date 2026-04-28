@@ -37,6 +37,10 @@ export interface GameControllerDeps {
   audio: unknown;
   gameData: unknown;
   analytics: unknown;
+  /** Optional navigation callback — allows game controller to route to results screen. */
+  goto?: (screen: string, data?: Record<string, unknown>) => void;
+  /** Screen data passed via goto('game', data) — e.g. adMockContinue, bonusMoves, chapter, level. */
+  screenData?: Record<string, unknown>;
 }
 
 export interface GameController {

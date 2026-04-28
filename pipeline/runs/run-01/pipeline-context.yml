@@ -1,0 +1,71 @@
+aliases:
+  runDir: "/Users/eronsalling/Developer/WolfGamesWork/Wolfra/agent-worker/workspace/push-test-game-2/pipeline/runs/run-01"
+  pass: "core"
+  skillRoot: "/Users/eronsalling/Developer/WolfGamesWork/Wolfra/agent-worker/workspace/push-test-game-2/.claude/skills/pipeline-build-game"
+  repoRoot: "/Users/eronsalling/Developer/WolfGamesWork/Wolfra/agent-worker/workspace/push-test-game-2"
+  rules: "/Users/eronsalling/Developer/WolfGamesWork/Wolfra/agent-worker/workspace/push-test-game-2/.claude/rules"
+  tsRunner: "bun"
+  previousRunLog: null
+  buildCmd: "bun run build"
+  testCmd: "bun run test:run"
+
+pass: "core"
+previous_pass_stable: true
+
+stack:
+  renderer: "pixi"
+  ui: "solidjs"
+  bundler: "vite"
+  runtime: "bun"
+  testing: "vitest"
+  animation: "gsap"
+  build_cmd: "bun run build"
+  test_cmd: "bun run test:run"
+  summary: "pixi + solidjs + gsap + bun (vite, vitest)"
+
+paths:
+  tests: "tests/"
+  modules: "src/modules/"
+  core: "src/core/"
+  game: "src/game/"
+  docs: "docs/"
+
+existing-features:
+  - game state signals (score, level — SolidJS createSignal, no ECS)
+  - start screen stub (DOM mode — HTML elements, Play button, initGpu/loadCore flow)
+  - game controller stub (DOM mode — placeholder h1, no Pixi, no game logic)
+  - results screen (DOM — score display, Play Again / Main Menu buttons)
+  - asset manifest skeleton (only theme-branding bundle; no scene/core/audio bundles)
+
+dom-overlays:
+  - element: WolfGamesLogo
+    file: src/game/screens/GameScreen.tsx
+    position: bottom
+    height_px: 24
+    margin_bottom_px: 32
+    total_reserved_px: 56
+    css: "absolute bottom-8 left-1/2 -translate-x-1/2"
+
+viewport-budget:
+  # Written by 30-plan (sole owner per run-context-ownership.md)
+  # Derived from: greenfield_defaults (no layout source existed) + pipeline-context.yml dom-overlays
+  default:
+    screen_h: 844
+    screen_w: 390
+    dom_reserved_top: 0
+    dom_reserved_bottom: 56
+    hud_top_px: 120
+    bottom_band_px: 80
+    board_height_px: 580
+    board_width_px: 374
+    cols: 7
+    rows: 9
+    cell_size_px: 52
+    grid_width_px: 376
+    grid_height_px: 484
+    tile_art_px: 42
+    min_touch_target_px: 52
+  tutorial:
+    cols: 4
+    rows: 5
+    cell_size_px: 52

@@ -1,0 +1,749 @@
+# gdd-analysis.yml — Structured feature delta
+# Written by phase 20 (analyze). Read by plan, implement, player-flow, stabilize.
+# Game: Mystery Inc. Mash: Clue Connect
+# GDD: pipeline/game-prompt.md
+# Pass: core
+
+game: "Mystery Inc. Mash: Clue Connect"
+counts:
+  exists: 3
+  partial: 2
+  new: 18
+  conflict: 2
+  content_gap: 2
+conflict_breakdown:
+  reuse: 1
+  adapt: 1
+  replace: 0
+high_risk: 3
+open_questions: 5
+
+features:
+
+  # ─── EXISTS ──────────────────────────────────────────────────────────────
+
+  - id: loading-screen
+    name: "Loading screen (boot phase)"
+    status: exists
+    risk: LOW
+    complexity: low
+    cos_required: []
+    lifecycle_phase: BOOT
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: [loading-progress-bar]
+    affected_files:
+      - src/game/screens/LoadingScreen.tsx
+    dependencies: []
+    ux:
+      discovery: "n/a — auto-displayed on app open"
+      feedback: "progress bar updates as bundles resolve"
+      onboarding: "n/a"
+    notes: "Scaffold loading screen exists and is functional. No GDD-specific changes needed for core pass."
+
+  - id: results-screen-shell
+    name: "Results screen shell (win/loss DOM wrappers)"
+    status: exists
+    risk: LOW
+    complexity: low
+    cos_required: []
+    lifecycle_phase: OUTCOME
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [play-again-button, main-menu-button]
+      feedback_surfaces: [score-display]
+    affected_files:
+      - src/game/screens/ResultsScreen.tsx
+    dependencies: []
+    ux:
+      discovery: "slides in automatically on win/loss"
+      feedback: "score and star display"
+      onboarding: "n/a"
+    notes: "Generic results screen exists. GDD requires game-specific win (Level Complete) and loss screens with Scooby-Doo branding — classified as content-gap, not exists. This entry covers the structural scaffold only."
+
+  - id: game-state-signals
+    name: "SolidJS game state signals (score, level)"
+    status: exists
+    risk: LOW
+    complexity: low
+    cos_required: []
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: []
+    affected_files:
+      - src/game/state.ts
+    dependencies: []
+    ux:
+      discovery: "n/a — internal signal store"
+      feedback: "n/a"
+      onboarding: "n/a"
+    notes: "Basic score/level signals exist but lack ECS bridge and GDD-required fields (movesRemaining, evidenceMeterValue, starsEarned). Will be extended — not replaced — in the ECS plugin feature."
+
+  # ─── PARTIAL ─────────────────────────────────────────────────────────────
+
+  - id: start-screen
+    name: "Title / start screen"
+    status: partial
+    risk: MEDIUM
+    complexity: med
+    cos_required: []
+    lifecycle_phase: TITLE
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [play-button, settings-button]
+      feedback_surfaces: [logo, companion-animation]
+    affected_files:
+      - src/game/screens/StartScreen.tsx
+      - <game-root>/screens/startView.ts
+    dependencies: []
+    ux:
+      discovery: "Play button prominent center-bottom; Scooby peek animation draws the eye"
+      feedback: "Scooby snack animation on screen load"
+      onboarding: "First-launch routes to First-Time Intro cutscene; returning players go to Chapter Start Interstitial"
+    notes: "Start screen stub exists (HTML elements, Play button, initGpu/loadCore flow) but is placeholder content. GDD requires Scooby-Doo logo, Mystery Machine illustration, Scooby peek animation, and first-launch vs returning player routing logic. Classified partial: routing infrastructure exists, visual content and routing logic are missing."
+
+  - id: game-controller
+    name: "Game controller (GameController integration point)"
+    status: partial
+    risk: HIGH
+    complexity: high
+    cos_required: [core-interaction, animated-dynamics, scoring]
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [game-board]
+      feedback_surfaces: [board, hud, companion-strip]
+    affected_files:
+      - <game-root>/screens/gameController.ts
+      - <game-root>/index.ts
+    dependencies: [ecs-plugin, board-renderer, hud-renderer, tile-interaction, gravity-system, evidence-meter, move-counter, companion-strip]
+    ux:
+      discovery: "n/a — central wiring point"
+      feedback: "n/a — delegates to renderers"
+      onboarding: "n/a"
+    notes: "Game controller stub exists (DOM mode — placeholder h1, no Pixi, no game logic). Must be rebuilt to wire ECS DB, Pixi app, renderers, input routing, win/loss conditions. Classified partial because the module file and contract shape exist. Carries HIGH risk — per risk-rules.md: touches GameController = HIGH."
+
+  # ─── CONTENT GAP ─────────────────────────────────────────────────────────
+
+  - id: content-gap-results-screens
+    name: "Level Complete / Loss screen (Scooby-Doo content)"
+    status: content-gap
+    risk: MEDIUM
+    complexity: med
+    cos_required: []
+    lifecycle_phase: OUTCOME
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [next-level-button, try-again-button, watch-ad-button, chapter-map-button]
+      feedback_surfaces: [star-rating, companion-animation, evidence-meter-display, coin-counter]
+    affected_files:
+      - src/game/screens/ResultsScreen.tsx
+    dependencies: [evidence-meter, star-rating, scooby-snack-coins]
+    ux:
+      discovery: "slides in from bottom after win/loss sequence completes"
+      feedback: "star animation staggered; coin counter ticks up; Scooby happy dance (win) or sympathetic (loss)"
+      onboarding: "n/a — encountered after first win/loss"
+    notes: "Results screen shell exists but shows generic score/play-again UI. GDD requires: win path shows 'Clue collected!' banner, 1-3 stars, Scooby happy dance, coin tally, Next Level and Chapter Map buttons. Loss path shows 'So close, gang!' banner, Watch Ad (+5 moves) and Try Again buttons. Classified content-gap: infrastructure exists, Scooby-Doo content and branching win/loss logic are missing."
+
+  - id: content-gap-asset-manifest
+    name: "Asset manifest — game bundles"
+    status: content-gap
+    risk: LOW
+    complexity: low
+    cos_required: [canvas]
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: []
+    affected_files:
+      - src/game/asset-manifest.ts
+    dependencies: []
+    ux:
+      discovery: "n/a — asset infrastructure"
+      feedback: "n/a"
+      onboarding: "n/a"
+    notes: "Manifest skeleton exists with only theme-branding bundle. GDD requires scene-* bundle for clue tile atlas, blocker tiles, Mystery Box; core-* for HUD atlas; audio-* for SFX and music; fx-* for particle effects. Classified content-gap: manifest schema and loader infrastructure exist, game-specific bundles are absent."
+
+  # ─── NEW ──────────────────────────────────────────────────────────────────
+
+  - id: ecs-plugin
+    name: "ECS plugin (game state source of truth)"
+    status: new
+    risk: HIGH
+    complexity: high
+    cos_required: [core-interaction, animated-dynamics, scoring]
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: []
+    affected_files:
+      - <game-root>/ClueConnectPlugin.ts
+      - <game-root>/state/types.ts
+      - <game-root>/state/bridgeEcsToSignals.ts
+    dependencies: []
+    ux:
+      discovery: "n/a — internal state management"
+      feedback: "n/a"
+      onboarding: "n/a"
+    notes: "GDD requires full ECS-based game state: board cells (entities), score, movesRemaining, evidenceMeterValue, starsEarned, boardState (IDLE/SELECTING/ANIMATING/WON/LOST/PAUSED), currentChain, activeBlockers. ECS is the source of truth per ecs-state rules; signals bridge to DOM. Current state.ts uses SolidJS signals directly — per-rules violation for game state. Carries HIGH risk: ECS plugin creation touches central state architecture."
+
+  - id: 7x9-grid-layout
+    name: "7×9 game board grid layout and viewport budget"
+    status: new
+    risk: HIGH
+    complexity: high
+    cos_required: [canvas, core-interaction]
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [board-cell]
+      feedback_surfaces: [board, cells]
+    affected_files:
+      - <game-root>/renderers/BoardRenderer.ts
+      - <game-root>/config/layout.ts
+    dependencies: [ecs-plugin]
+    ux:
+      discovery: "board occupies ~70% of screen height; immediately visible on game screen entry"
+      feedback: "cell size minimum 44×44 pt touch target; tile art fills ~80% of cell"
+      onboarding: "tutorial level 1 shows reduced 4×5 sub-grid to introduce board concept gently"
+    notes: "7 columns × 9 rows (63 cells). Viewport budget: top ~15% HUD, mid ~70% board, bottom ~15% pause/hint. Portrait only. Minimum 44pt touch target per cell. Board scales uniformly to safe-area width. Bottom band partially occupied by WolfGamesLogo (56px reserved). Carries HIGH risk: changes viewport/layout logic, adds new UI element, touches renderer."
+
+  - id: clue-tiles
+    name: "Clue tile entities (6 types: Footprint, Magnifying Glass, Flashlight, Fingerprint, Rope, Scooby Snack)"
+    status: new
+    risk: MEDIUM
+    complexity: high
+    cos_required: [canvas, core-interaction, animated-dynamics]
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [board-cell]
+      feedback_surfaces: [board, tile-sprite]
+    affected_files:
+      - <game-root>/entities/TileEntity.ts
+      - <game-root>/renderers/TileRenderer.ts
+      - src/game/asset-manifest.ts
+    dependencies: [ecs-plugin, 7x9-grid-layout, content-gap-asset-manifest]
+    ux:
+      discovery: "tiles fill the board immediately; each type has a distinct visual shape and icon"
+      feedback: "tile highlights on touch; chain trail drawn during drag; burst animation on clear"
+      onboarding: "tutorial level 1 highlights correct tiles; tutorial level 2 introduces full 6-type set"
+    notes: "6 distinct tile types. Each must be visually distinctive at a glance (canvas CoS). Visual: Footprint (brown paw), Magnifying Glass (gold), Flashlight (yellow beam), Fingerprint (purple swirl), Rope (green coil), Scooby Snack (orange bone biscuit). Tile stable identity required for animated-dynamics renderer keying."
+
+  - id: tap-drag-chain-interaction
+    name: "Tap-and-drag chain connection (primary interaction)"
+    status: new
+    risk: HIGH
+    complexity: high
+    cos_required: [core-interaction, animated-dynamics]
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [board-cell]
+      feedback_surfaces: [chain-trail, tile-selection-highlight, board]
+    affected_files:
+      - <game-root>/input/ChainInputHandler.ts
+      - <game-root>/input/interaction-archetype.md
+      - <game-root>/renderers/ChainRenderer.ts
+    dependencies: [ecs-plugin, 7x9-grid-layout, clue-tiles]
+    ux:
+      discovery: "board cells are visually pressable; first tile lights up on pointerdown"
+      feedback: "chain trail drawn behind finger; tick haptic per tile caught; chain highlights; invalid single-tile lift cancels silently (no move consumed)"
+      onboarding: "tutorial level 1 shows ghost-finger prompt and dims non-selectable tiles"
+    notes: "Swipe-select interaction archetype (see core-interaction CoS). Continuous drag from tile to adjacent tile (orthogonal + diagonal). Minimum 2 tiles for valid chain. Chain can be unwound by crossing back. Finger-up on 1 tile cancels (no move consumed). Finger-up on 2+ tiles confirms clear. Input queued during ANIMATING state. Interaction-archetype.md must be written before implementation. Carries HIGH risk: primary interaction, touches renderer and game controller."
+
+  - id: gravity-fill-system
+    name: "Gravity fill system (tile fall and refill)"
+    status: new
+    risk: MEDIUM
+    complexity: high
+    cos_required: [animated-dynamics, core-interaction]
+    ux_zones:
+      thumb_zone: center
+      touch_targets: []
+      feedback_surfaces: [board, falling-tiles, spawn-animation]
+    affected_files:
+      - <game-root>/state/gravityLogic.ts
+      - <game-root>/renderers/TileRenderer.ts
+    dependencies: [ecs-plugin, clue-tiles, 7x9-grid-layout]
+    ux:
+      discovery: "tiles visibly fall when cells below clear; new tiles fall in from top"
+      feedback: "80ms per cell fall animation with squash/bounce on landing; spawn from above with fall-in animation"
+      onboarding: "first chain clear in tutorial level 1 demonstrates gravity"
+    notes: "Standard downward gravity. 80ms per cell of fall distance. New tiles spawn above visible grid and fall in. Trap Door cells add extra column drop after normal gravity resolves (60ms per cell for extra drop). No lateral sliding. Stable tile identity required: pieces that fall are repositioned, not destroyed and recreated. Board diff approach: only tiles that moved animate."
+
+  - id: evidence-meter
+    name: "Evidence Meter (level goal progress)"
+    status: new
+    risk: MEDIUM
+    complexity: med
+    cos_required: [core-interaction, scoring]
+    lifecycle_phase: PLAY
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: [evidence-meter-bar, hud]
+    affected_files:
+      - <game-root>/renderers/HudRenderer.ts
+      - <game-root>/state/ClueConnectPlugin.ts
+    dependencies: [ecs-plugin, 7x9-grid-layout]
+    ux:
+      discovery: "prominent top-center position in HUD; tutorial level 2 arrows point to it"
+      feedback: "meter fills visually with each chain clear; shimmer pulse animation on fill-complete"
+      onboarding: "tutorial level 2: Shaggy speech bubble 'Fill the meter before you run out of moves'"
+    notes: "Target: evidenceTarget % of meter filled within moveLimit. Meter fills proportionally per chain cleared. Win triggers when evidenceMeterValue >= evidenceTarget. Overflow (bonus clues collected past 100%) drives star rating. Shimmer pulse animation (400ms) on meter full."
+
+  - id: move-counter
+    name: "Move counter (HUD element)"
+    status: new
+    risk: MEDIUM
+    complexity: low
+    cos_required: [scoring]
+    lifecycle_phase: PLAY
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: [move-counter-display, hud]
+    affected_files:
+      - <game-root>/renderers/HudRenderer.ts
+    dependencies: [ecs-plugin, 7x9-grid-layout, hud-layout]
+    ux:
+      discovery: "top-right position in HUD; tutorial level 2 arrows point to it"
+      feedback: "counter decrements after each move; flashes red 2× on reaching 0"
+      onboarding: "tutorial level 2 introduces counter with Shaggy speech bubble"
+    notes: "One move consumed per drag-and-release (whether chain is valid or not — single-tile cancel does not consume a move). Moves flash red (300ms, 2 pulses) on reaching 0. Mystery Box bonus grants +2 moves."
+
+  - id: star-rating
+    name: "Star rating (1–3 stars based on Evidence Meter overflow)"
+    status: new
+    risk: LOW
+    complexity: low
+    cos_required: [scoring]
+    lifecycle_phase: OUTCOME
+    ux_zones:
+      thumb_zone: center
+      touch_targets: []
+      feedback_surfaces: [star-display, results-screen]
+    affected_files:
+      - <game-root>/state/ClueConnectPlugin.ts
+      - src/game/screens/ResultsScreen.tsx
+    dependencies: [evidence-meter, ecs-plugin]
+    ux:
+      discovery: "stars animate in one by one on Level Complete screen"
+      feedback: "staggered star animation (200ms each); stars are cosmetic only (no gameplay effect)"
+      onboarding: "first level complete reveals star mechanic naturally"
+    notes: "1–3 stars based on Evidence Meter overflow (bonus clues collected past evidenceTarget). Cosmetic only — no gameplay consequence. Stars animate in one by one (200ms each) on Level Complete screen."
+
+  - id: scoring-formula
+    name: "Scoring formula (chain length, bonus moves, evidence overflow)"
+    status: new
+    risk: LOW
+    complexity: med
+    cos_required: [scoring]
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: [hud]
+    affected_files:
+      - <game-root>/state/scoringLogic.ts
+    dependencies: [ecs-plugin, clue-tiles, evidence-meter, move-counter]
+    ux:
+      discovery: "score shown in HUD; increases visibly after each chain clear"
+      feedback: "score tick-up animation on chain clear"
+      onboarding: "n/a — score is self-explanatory"
+    notes: "GDD specifies chain-based Evidence Meter fill as the primary goal metric. Star rating based on overflow. Scoring must have at least 2 multiplicative dimensions per scoring CoS: chain length (magnitude bonus — longer chains fill more evidence AND score more), move efficiency (starsEarned inverse of movesUsed), Mystery Box bonus (+2 moves). Base formula: evidenceFill per chain scales with chain length; star thresholds drive starsEarned (1=met target, 2=10% overflow, 3=25%+ overflow). Move-efficiency bonus for leaderboard striation in meta pass."
+
+  - id: mystery-box-tile
+    name: "Mystery Box (wildcard special tile)"
+    status: new
+    risk: MEDIUM
+    complexity: med
+    cos_required: [core-interaction, animated-dynamics, canvas]
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [board-cell]
+      feedback_surfaces: [board, tile-sprite, move-counter]
+    affected_files:
+      - <game-root>/entities/SpecialTileEntity.ts
+      - <game-root>/state/ClueConnectPlugin.ts
+      - <game-root>/renderers/TileRenderer.ts
+    dependencies: [clue-tiles, tap-drag-chain-interaction, move-counter]
+    ux:
+      discovery: "visually distinct — wooden crate with glowing '?' stencil; appears mid-board after 5+ chain"
+      feedback: "+2 move counter animation when Mystery Box is included in a chain"
+      onboarding: "first Mystery Box spawns naturally when player achieves 5+ chain; visual distinctiveness teaches it"
+    notes: "Spawns at center of cleared chain when 5+ tiles cleared in one move. Wildcard: counts as any tile type. Grants +2 bonus moves when included in a chain. Cannot be the sole tile in a chain. Multiple Mystery Boxes in one chain each contribute their bonus. Classified as pattern-buster in secondary pass, but canvas/core-interaction/animated-dynamics needed in core pass for visual and interaction correctness."
+
+  - id: red-herring-blocker
+    name: "Red Herring blocker tile (Chapter 2+)"
+    status: new
+    risk: MEDIUM
+    complexity: med
+    cos_required: [core-interaction, animated-dynamics, canvas]
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [board-cell]
+      feedback_surfaces: [board, tile-sprite]
+    affected_files:
+      - <game-root>/entities/BlockerEntity.ts
+      - <game-root>/state/ClueConnectPlugin.ts
+      - <game-root>/renderers/TileRenderer.ts
+    dependencies: [clue-tiles, 7x9-grid-layout, level-generator]
+    ux:
+      discovery: "visually distinct red cartoon fish; immovable — player learns it cannot be included in chain on first contact"
+      feedback: "shake/reject animation when player tries to chain through it; 'escape' pop + laugh animation when last adjacent tile is cleared"
+      onboarding: "introduced in Chapter 2 level 1 with contextual hint"
+    notes: "Cannot be matched or moved. Blocks chains from passing through it. Removed by clearing all 4 orthogonally adjacent tiles in a single move. Diagonal adjacency does not count. Does not fall under gravity. Corner placement requires only 2 adjacent clears. Rows 2–8 only, no two in same column."
+
+  - id: cobweb-blocker
+    name: "Cobweb sticky blocker (Chapter 3+)"
+    status: new
+    risk: MEDIUM
+    complexity: med
+    cos_required: [core-interaction, animated-dynamics, canvas]
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [board-cell]
+      feedback_surfaces: [board, tile-sprite]
+    affected_files:
+      - <game-root>/entities/BlockerEntity.ts
+      - <game-root>/state/ClueConnectPlugin.ts
+      - <game-root>/renderers/TileRenderer.ts
+    dependencies: [clue-tiles, red-herring-blocker, level-generator]
+    ux:
+      discovery: "silvery web overlay visually distinct; player learns trapped tile is un-selectable on first contact"
+      feedback: "visual feedback when web clears (web dissolves, tile freed); freed tile visual distinct from trapped"
+      onboarding: "introduced in Chapter 3 level 1 with contextual hint"
+    notes: "Overlays a clue tile — that tile cannot be included in a chain. Freed by matching the trapped tile type in an adjacent chain (trapped tile not counted in that chain, becomes free next move). Cannot stack. Cobweb on Mystery Box traps wildcard until freed. Max 2 Cobwebs per column."
+
+  - id: locked-door-blocker
+    name: "Locked Door + Key tile (Chapter 4+)"
+    status: new
+    risk: MEDIUM
+    complexity: med
+    cos_required: [core-interaction, animated-dynamics, canvas]
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [board-cell]
+      feedback_surfaces: [board, tile-sprite]
+    affected_files:
+      - <game-root>/entities/BlockerEntity.ts
+      - <game-root>/entities/KeyTileEntity.ts
+      - <game-root>/state/ClueConnectPlugin.ts
+      - <game-root>/renderers/TileRenderer.ts
+    dependencies: [clue-tiles, cobweb-blocker, level-generator]
+    ux:
+      discovery: "Key tile falls from top on level start; Locked Door visually blocks cell; player learns connection by experimenting"
+      feedback: "Key tile visual distinct (gold key icon falls from top); door unlocks with animation when Key matched"
+      onboarding: "introduced in Chapter 4 level 1 with contextual hint"
+    notes: "Stone archway with padlock — spans one cell. Cleared only by matching Key tile in any chain of 2+. Key appears in top row at random column at level start. Falls under gravity like clue tiles. Multiple Locked Doors: Key removes lowest first. Key not matched before moves run out is lost. Rows 4–7 mid-board only."
+
+  - id: trap-door-cell
+    name: "Trap Door gravity modifier cell"
+    status: new
+    risk: MEDIUM
+    complexity: med
+    cos_required: [animated-dynamics, core-interaction]
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [board-cell]
+      feedback_surfaces: [board, column-tiles]
+    affected_files:
+      - <game-root>/state/gravityLogic.ts
+      - <game-root>/renderers/BoardRenderer.ts
+    dependencies: [gravity-fill-system, level-generator]
+    ux:
+      discovery: "wooden hatch drawn on cell floor; flips open when triggered — visually communicates extra drop"
+      feedback: "hatch flip animation + column cascade after normal gravity"
+      onboarding: "first Trap Door cell triggers a visible cascade that teaches the mechanic organically"
+    notes: "Cell property, not a tile. When cleared tile was in Trap Door cell, all tiles in that column above drop an extra row (60ms per cell). Does not trigger if Red Herring is on Trap Door cell. Permanent for the level. Rows 5–8 only, no two in same column."
+
+  - id: level-generator
+    name: "Level generator (hybrid hand-crafted + procedural)"
+    status: new
+    risk: MEDIUM
+    complexity: high
+    cos_required: [core-interaction, scoring, skill-curve]
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: []
+    affected_files:
+      - <game-root>/levelgen/LevelGenerator.ts
+      - <game-root>/levelgen/SolvabilityValidator.ts
+      - <game-root>/levelgen/SeededRng.ts
+      - <game-root>/data/handcrafted-levels.json
+      - <game-root>/data/fallback-levels.json
+    dependencies: [ecs-plugin, clue-tiles]
+    ux:
+      discovery: "n/a — internal system"
+      feedback: "n/a"
+      onboarding: "n/a — generates the boards players see"
+    notes: "Chapter 1 Levels 1–3: hand-crafted (tutorial). All others: procedurally generated with seeded RNG. Seed formula: (chapterIndex * 10000) + (levelIndex * 100) + 7331. Difficulty curve table in GDD. Solvability validator: greedy solver, 10K iteration cap, 6 named rejection conditions. Up to 10 retries per level (seed+1 each). Fallback chain: procedural → fallback-levels.json → hard-coded emergency board. skill-curve CoS is meta-pass but level generator creates the difficulty scaffold; flagged as deferred for meta pass stabilize. No Math.random() — seeded RNG only."
+
+  - id: hud-layout
+    name: "HUD layout (top band: Evidence Meter, move counter, chapter name, companion strip)"
+    status: new
+    risk: HIGH
+    complexity: med
+    cos_required: [canvas]
+    lifecycle_phase: PLAY
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: [hud, evidence-meter-bar, move-counter-display, companion-strip]
+    affected_files:
+      - <game-root>/renderers/HudRenderer.ts
+      - <game-root>/config/layout.ts
+    dependencies: [ecs-plugin, 7x9-grid-layout]
+    ux:
+      discovery: "HUD always visible at top; all elements labeled with icon+text"
+      feedback: "real-time update on every move; companion portrait reacts to good/bad moves"
+      onboarding: "tutorial level 2 adds guidance arrows pointing to meter and counter"
+    notes: "Top ~15% of screen (portrait). Contains: Evidence Meter (top-center), move counter (top-right), chapter location name (top-left), companion reaction strip (one gang member portrait). Carries HIGH risk: adds new UI element to viewport and modifies layout logic. Must not overlap the board. Bottom band (15%) contains pause + hint buttons."
+
+  - id: companion-system
+    name: "Companion reaction system (Mystery Inc. gang portraits)"
+    status: new
+    risk: MEDIUM
+    complexity: med
+    cos_required: [animated-dynamics]
+    lifecycle_phase: PLAY
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: [companion-strip, hud]
+    affected_files:
+      - <game-root>/renderers/CompanionRenderer.ts
+      - <game-root>/state/ClueConnectPlugin.ts
+      - src/game/screens/useCompanionDialogue.ts
+    dependencies: [hud-layout, ecs-plugin]
+    ux:
+      discovery: "gang portrait visible in HUD; Scooby delivers opening line on level start"
+      feedback: "portrait animation + speech bubble reacts to good chains / bad states"
+      onboarding: "Velma speech bubble in tutorial level 1; Shaggy in tutorial level 2"
+    notes: "Scooby, Shaggy, Fred, Daphne, Velma react live during gameplay. Scooby delivers level-start and unmask lines. Portrait strip in HUD companion reaction area. useCompanionDialogue.ts hook exists as scaffold — needs game-specific dialogue and reaction logic. Companion strip expands (600ms) on win."
+
+  - id: pause-and-hint-buttons
+    name: "Pause button and Hint button (bottom band)"
+    status: new
+    risk: MEDIUM
+    complexity: low
+    cos_required: [core-interaction]
+    lifecycle_phase: PLAY
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [pause-button, hint-button]
+      feedback_surfaces: [bottom-band]
+    affected_files:
+      - <game-root>/renderers/HudRenderer.ts
+      - <game-root>/screens/gameController.ts
+    dependencies: [hud-layout, scooby-snack-coins]
+    ux:
+      discovery: "bottom-left (pause) and bottom-right (hint) — thumb-natural zone; icon+label"
+      feedback: "board locks and pause overlay opens on pause tap; hint highlights a valid chain"
+      onboarding: "buttons visible from first play; hint tooltip shown if player is stuck > 30s (TBD)"
+    notes: "Bottom band ~15% of screen. Pause: bottom-left (44pt+ target). Hint: bottom-right, costs 1 Scooby Snack coin. Both buttons in thumb-natural zone per ux/core-guidelines.md. Hint mechanic requires Scooby Snack coin economy to be live."
+
+  - id: scooby-snack-coins
+    name: "Scooby Snack coin economy (hint cost, continue cost)"
+    status: new
+    risk: LOW
+    complexity: low
+    cos_required: [scoring]
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: [hud-coin-display, results-screen]
+    affected_files:
+      - <game-root>/state/ClueConnectPlugin.ts
+    dependencies: [ecs-plugin, star-rating]
+    ux:
+      discovery: "coin count shown in HUD; coins awarded on level complete (coin counter ticks up)"
+      feedback: "coin counter ticks up (400ms) on Level Complete screen"
+      onboarding: "first hint use deducts a coin — visible feedback"
+    notes: "Scooby Snack coins: earned on level complete, spent on hints (1 coin) or continues (+5 moves on loss). Coin tally displayed on Level Complete screen. Persistent meta-progression resource — survives between game sessions. GDD specifies 'watch ad or spend Scooby Snack coins for +5 moves' on Loss screen."
+
+  - id: tutorial-levels
+    name: "Tutorial levels 1 & 2 (guided onboarding)"
+    status: new
+    risk: MEDIUM
+    complexity: high
+    cos_required: [core-interaction, canvas]
+    lifecycle_phase: PLAY
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [board-cell, skip-button]
+      feedback_surfaces: [board, guidance-overlay, speech-bubble, companion-strip]
+    affected_files:
+      - <game-root>/data/handcrafted-levels.json
+      - <game-root>/levelgen/TutorialOverlay.ts
+      - <game-root>/screens/gameController.ts
+    dependencies: [tap-drag-chain-interaction, 7x9-grid-layout, companion-system, level-generator]
+    ux:
+      discovery: "tutorial begins immediately on first launch; ghost-finger prompt shows where to drag"
+      feedback: "Velma speech bubble on chain clear; Shaggy on tutorial 2 win; forced success on tutorial 1"
+      onboarding: "tutorial 1: 4×5 sub-grid, 3 tile types, only correct tiles tappable (others dimmed), hand-cursor overlay. Tutorial 2: full 7×9, 4 tile types, Evidence Meter and move counter visible, free choice with guidance arrows"
+    notes: "Tutorial 1 is a guided constrained experience (ghost-finger, dimmed non-selectable tiles). Tutorial 2 introduces full grid — cannot fail by design (hand-crafted board has sufficient slack). Both levels are in handcrafted-levels.json. TutorialOverlay.ts handles the guided state (dim non-selectable, show ghost-finger, show speech bubbles). Per lenses.md: tutorial must be seamless (inside gameplay), intuitive, and create aha moment."
+
+  - id: chapter-flow-screens
+    name: "Chapter Start Interstitial and Chapter Complete / Villain Unmask screen"
+    status: new
+    risk: MEDIUM
+    complexity: med
+    cos_required: []
+    lifecycle_phase: PROGRESSION
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [investigate-button, next-mystery-button, skip-button]
+      feedback_surfaces: [location-illustration, chapter-title, progress-ribbon, unmask-animation]
+    affected_files:
+      - src/game/screens/ResultsScreen.tsx
+      - <game-root>/screens/ChapterInterstitial.tsx
+      - <game-root>/screens/VillainUnmask.tsx
+    dependencies: [level-generator, companion-system, scooby-snack-coins, star-rating]
+    ux:
+      discovery: "appears automatically between levels and chapters; Investigate! button thumb-zone"
+      feedback: "full-bleed location illustration; Scooby + Shaggy peek animation; progress ribbon shows level N/10"
+      onboarding: "first encounter after tutorial level 2 — no instruction needed, tap to continue"
+    notes: "Chapter Start Interstitial: full-bleed location illustration, chapter title, 'Gather Clues!' progress ribbon, Scooby + Shaggy peek animation, Investigate! button. Chapter Complete: animated villain unmask sequence (Fred pulls mask), villain motive in 2–3 dialogue lines, total stars for chapter, Next Mystery! button (skippable after 3s). These screens map to the PROGRESSION lifecycle phase and the `results`/`interstitial-screen` wrapper."
+
+  - id: first-time-intro-cutscene
+    name: "First-Time Intro / Cutscene (5–7 panel comic-book style)"
+    status: new
+    risk: LOW
+    complexity: low
+    cos_required: []
+    lifecycle_phase: TITLE
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [advance-button, skip-button]
+      feedback_surfaces: [comic-panels, dialogue-text]
+    affected_files:
+      - <game-root>/screens/IntroScreen.tsx
+    dependencies: [companion-system]
+    ux:
+      discovery: "plays automatically on first launch after Play is tapped on title screen"
+      feedback: "tap-to-advance each panel; Skip button appears after 2 seconds (top-right)"
+      onboarding: "Fred briefs the gang; Velma explains mechanic in one line — sets up first tutorial level"
+    notes: "5–7 illustrated panels, comic-book style. Fred: 'There's a monster at the old Ravenswood Mansion! We need clues!' Velma: 'Connect the matching evidence to build our case — but watch your move count!' Skip button (top-right, 44pt+) appears after 2 seconds. First-launch only routing in StartScreen. Skip button placement is in 'stretching' zone (top-right) — acceptable for non-primary action per ux/core-guidelines.md."
+
+  - id: board-state-machine
+    name: "Board state machine (IDLE / SELECTING / ANIMATING / WON / LOST / PAUSED)"
+    status: new
+    risk: MEDIUM
+    complexity: med
+    cos_required: [core-interaction, animated-dynamics]
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: []
+    affected_files:
+      - <game-root>/state/ClueConnectPlugin.ts
+    dependencies: [ecs-plugin, tap-drag-chain-interaction, gravity-fill-system]
+    ux:
+      discovery: "n/a — state machine governs input gating"
+      feedback: "board dims to 60% opacity on LOST transition (300ms fade)"
+      onboarding: "n/a"
+    notes: "6 states: IDLE (input open), SELECTING (drag in progress), ANIMATING (post-chain input queued), WON (board locked), LOST (board locked), PAUSED (board locked). Any board-state transition that mutates visible pieces is animated — no instant state changes. Input queued during ANIMATING, not discarded. Win/loss evaluated after animation completes."
+
+  - id: win-loss-sequences
+    name: "Win sequence and loss sequence (ordered animations)"
+    status: new
+    risk: MEDIUM
+    complexity: med
+    cos_required: [animated-dynamics]
+    lifecycle_phase: OUTCOME
+    ux_zones:
+      thumb_zone: center
+      touch_targets: [next-level-button, try-again-button, watch-ad-button]
+      feedback_surfaces: [evidence-meter, companion-strip, results-screen]
+    affected_files:
+      - <game-root>/screens/gameController.ts
+      - src/game/screens/ResultsScreen.tsx
+    dependencies: [board-state-machine, evidence-meter, move-counter, companion-system, content-gap-results-screens]
+    ux:
+      discovery: "win/loss screens slide in from bottom; clearly signals outcome"
+      feedback: "win: meter shimmer (400ms) → Scooby bark/jump (600ms) → screen slides in (300ms) → stars animate (200ms each) → coin counter ticks (400ms) → Next Level button appears (200ms). Loss: move counter flashes red (300ms, 2 pulses) → meter shake (200ms) → Shaggy droops (500ms) → board dims (300ms) → screen slides in (300ms) → buttons appear (200ms)"
+      onboarding: "first win/loss naturally reveals the screen"
+    notes: "GDD specifies exact ordered animation sequences for both win and loss. All transitions animated with specified durations. Loss screen uses 'So close, gang!' banner — never 'Game Over'. Two loss options: Watch Ad (+5 moves, same board) and Try Again (reset same board, full move limit)."
+
+  # ─── CONFLICT ─────────────────────────────────────────────────────────────
+
+  - id: conflict-game-state-signals
+    name: "Conflict: SolidJS signals used as game state (not ECS bridge)"
+    status: conflict
+    risk: MEDIUM
+    complexity: med
+    cos_required: [core-interaction, scoring]
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: []
+    affected_files:
+      - src/game/state.ts
+      - <game-root>/state/ClueConnectPlugin.ts
+    dependencies: [ecs-plugin]
+    ux:
+      discovery: "n/a"
+      feedback: "n/a"
+      onboarding: "n/a"
+    notes: "Existing state.ts uses createSignal for score and level as the source of truth. GDD + ecs-state rules require ECS as source of truth; signals are DOM bridge only. Resolution: adapt — extend state.ts to add signals needed by DOM screens (movesRemaining, evidenceMeterValue, starsEarned), but bridge them from ECS via bridgeEcsToSignals(). Keep existing score/level signals but wire them to ECS resources. No replace: signal shape is kept, wiring changes."
+
+  - id: conflict-mygame-contract
+    name: "Conflict: mygame-contract game slug ('mygame')"
+    status: conflict
+    risk: LOW
+    complexity: low
+    cos_required: []
+    ux_zones:
+      thumb_zone: out-of-reach
+      touch_targets: []
+      feedback_surfaces: []
+    affected_files:
+      - src/game/mygame-contract.ts
+      - src/game/mygame/index.ts
+    dependencies: []
+    ux:
+      discovery: "n/a"
+      feedback: "n/a"
+      onboarding: "n/a"
+    notes: "Scaffold uses 'mygame' slug. GDD resolves to a new slug (plan phase resolves q-game-name). Resolution: reuse — mygame-contract.ts defines the GameController contract shape which is fully reusable. Plan phase will determine the final slug and the affected_files above will be renamed/moved."
+
+conflicts:
+  - id: conflict-game-state-signals
+    sub: adapt
+    reason: "Signal shape is preserved; wiring changes to bridge from ECS resources via bridgeEcsToSignals(). DOM bridge signals for movesRemaining, evidenceMeterValue, starsEarned added alongside existing score/level."
+
+  - id: conflict-mygame-contract
+    sub: reuse
+    reason: "GameController contract shape (setupGame, setupStartScreen, GameControllerDeps) is game-agnostic and will be reused verbatim. Plan phase resolves slug rename."
+
+risk_areas:
+  - feature: game-controller
+    reason: "Central integration point — wires ECS, Pixi, all renderers, input, and win/loss conditions. A wrong integration order (e.g. ECS created before Pixi, or bridge set up before app.init) silently breaks rendering or ECS→signal reactivity."
+
+  - feature: 7x9-grid-layout
+    reason: "Changes viewport layout logic and adds new UI elements. Board + HUD + bottom band must fit within 390x844 safe area without overlap, with WolfGamesLogo reserved bottom 56px."
+
+  - feature: tap-drag-chain-interaction
+    reason: "Primary interaction is the core loop. Pointer capture, touch-action:none, input queueing during ANIMATING, and chain unwind must all work correctly on mobile. Missing any of these silently breaks gameplay."
+
+open_questions:
+  - id: oq-1
+    question: "What is the resolved game slug (directory name under src/game/)?"
+    context: "GDD refers to 'myscooby' in the level generator section (src/game/myscooby/data/handcrafted-levels.json), but plan phase owns q-game-name resolution. analyze phase does not infer the slug."
+
+  - id: oq-2
+    question: "What is the exact Scooby Snack coin earn rate per level (base award before star bonus)?"
+    context: "GDD mentions 'total Scooby Snack coins earned' on Level Complete screen and coins as continue/hint currency, but does not specify earn rate formula or star bonus amounts."
+
+  - id: oq-3
+    question: "Does the Watch Ad (+5 moves) path require an actual ad integration or a mock for core pass?"
+    context: "GDD specifies 'Watch Ad (+5 moves)' on loss screen. Core pass likely uses a mock/bypass. Clarification needed for plan phase to scope ad SDK integration."
+
+  - id: oq-4
+    question: "What is the companion portrait animation trigger logic (which gang member shows when)?"
+    context: "GDD says 'one gang member portrait reacts to good/bad moves' and 'Scooby delivers level-start and unmask lines', but does not specify the rotation/selection logic for Fred, Daphne, Velma, Shaggy during gameplay."
+
+  - id: oq-5
+    question: "How does the hint mechanic identify the 'best' chain to highlight?"
+    context: "GDD mentions 'hint button (bottom-right, costs 1 Scooby Snack coin)' but does not specify hint algorithm (longest chain? highest evidence fill? specific tile type priority?)."

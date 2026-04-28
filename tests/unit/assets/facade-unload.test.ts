@@ -18,31 +18,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@wolfgames/components/core', () => {
-  const createAssetFacade = vi.fn(({ loaders }: { loaders?: Record<string, unknown> }) => {
+  const createAssetCoordinator = vi.fn(({ loaders }: { loaders?: Record<string, unknown> }) => {
     const loaded = new Set<string>();
     const unloaded = new Set<string>();
-    return {
-      loadBundle: vi.fn(async (name: string) => { loaded.add(name); unloaded.delete(name); }),
-      loadBundles: vi.fn(async (names: string[]) => { for (const n of names) { loaded.add(n); unloaded.delete(n); } }),
-      backgroundLoadBundle: vi.fn(async () => {}),
-      preloadScene: vi.fn(async () => {}),
-      loadBoot: vi.fn(async () => { loaded.add('boot-splash'); }),
-      loadCore: vi.fn(async () => { loaded.add('core-ui'); }),
-      loadTheme: vi.fn(async () => { loaded.add('theme-branding'); }),
-      loadAudio: vi.fn(async () => { loaded.add('audio-sfx'); }),
-      loadScene: vi.fn(async (name: string) => { loaded.add(`scene-${name}`); }),
-      initGpu: vi.fn(async () => {}),
-      getLoadedBundles: vi.fn(() => [...loaded]),
-      isLoaded: vi.fn((name: string) => loaded.has(name)),
-      unloadBundle: vi.fn((name: string) => { loaded.delete(name); unloaded.add(name); }),
-      unloadBundles: vi.fn((names: string[]) => { for (const n of names) { loaded.delete(n); unloaded.add(n); } }),
-      unloadScene: vi.fn((sceneName: string) => {
-        const name = `scene-${sceneName}`;
-        loaded.delete(name);
-        unloaded.add(name);
-      }),
-      startBackgroundLoading: vi.fn(async () => {}),
-      loadingState: vi.fn(() => ({
+    const loaderMap: Record<string, { unloadBundle?: (n: string) => void; [k: string]: unknown }> = {};
+
+    // Wrap each incoming loader so its unloadBundle also removes from the coordinator's loaded set
+    if (loaders) {
+      for (const [type, loader] of Object.entries(loaders)) {
+        const rawLoader = loader as { unloadBundle?: (n: string) => void; [k: string]: unknown };
+        loaderMap[type] = {
+          ...rawLoader,
+          unloadBundle: (name: string) => {
+            loaded.delete(name);
+            unloaded.add(name);
+            rawLoader.unloadBundle?.(name);
+          },
+        };
+      }
+    }
+
+    const loadingStateSignal = {
+      get: () => ({
         loading: [],
         loaded: [...loaded],
         backgroundLoading: [],
@@ -50,41 +47,64 @@ vi.mock('@wolfgames/components/core', () => {
         errors: {},
         bundleProgress: {},
         progress: 0,
-      })),
-      loadingStateSignal: {
-        get: vi.fn(() => ({
-          loading: [],
-          loaded: [...loaded],
-          backgroundLoading: [],
-          unloaded: [...unloaded],
-          errors: {},
-          bundleProgress: {},
-          progress: 0,
-        })),
-        set: vi.fn(),
-        subscribe: vi.fn(() => () => {}),
-      },
-      ready: { get: vi.fn(() => false), set: vi.fn(), subscribe: vi.fn(() => () => {}) },
-      gpuReady: { get: vi.fn(() => false), set: vi.fn(), subscribe: vi.fn(() => () => {}) },
-      dom: {
-        getFrameURL: vi.fn(async () => 'blob:mock'),
-        get: vi.fn(() => null),
-        getImage: vi.fn(() => null),
-        getSheet: vi.fn(() => null),
-        getSpritesheet: vi.fn(() => null),
-      },
-      getLoader: vi.fn(() => null),
+      }),
+      set: vi.fn(),
+      subscribe: vi.fn(() => () => {}),
+    };
+
+    return {
+      loadBundle: vi.fn(async (name: string) => { loaded.add(name); unloaded.delete(name); }),
+      loadBundles: vi.fn(async (names: string[]) => { for (const n of names) { loaded.add(n); unloaded.delete(n); } }),
+      backgroundLoadBundle: vi.fn(async () => {}),
+      preloadScene: vi.fn(async () => {}),
+      initLoader: vi.fn((type: string, loader: unknown) => {
+        const rawLoader = loader as { unloadBundle?: (n: string) => void; [k: string]: unknown };
+        loaderMap[type] = {
+          ...rawLoader,
+          unloadBundle: (name: string) => { loaded.delete(name); unloaded.add(name); rawLoader.unloadBundle?.(name); },
+        };
+      }),
+      getLoadedBundles: vi.fn(() => [...loaded]),
+      isLoaded: vi.fn((name: string) => loaded.has(name)),
+      startBackgroundLoading: vi.fn(async () => {}),
+      loadingState: loadingStateSignal,
+      getLoader: vi.fn((type: string) => loaderMap[type] ?? null),
       dispose: vi.fn(),
-      coordinator: {},
-      _loaders: loaders,
+      _loaders: loaderMap,
       _loaded: loaded,
       _unloaded: unloaded,
     };
   });
 
+  const createDomLoader = vi.fn(() => ({
+    init: vi.fn(),
+    loadBundle: vi.fn(async () => {}),
+    get: vi.fn(() => null),
+    getImage: vi.fn(() => null),
+    getSheet: vi.fn(() => null),
+    getSpritesheet: vi.fn(() => null),
+    has: vi.fn(() => false),
+    unloadBundle: vi.fn(),
+    dispose: vi.fn(),
+  }));
+
+  const createSignal = vi.fn((initial: unknown) => {
+    let value = initial;
+    const subscribers: Array<(v: unknown) => void> = [];
+    return {
+      get: vi.fn(() => value),
+      set: vi.fn((v: unknown) => { value = v; subscribers.forEach(fn => fn(v)); }),
+      subscribe: vi.fn((fn: (v: unknown) => void) => { subscribers.push(fn); return () => {}; }),
+    };
+  });
+
   return {
-    createAssetFacade,
+    createAssetCoordinator,
+    createDomLoader,
+    createSignal,
     validateManifest: vi.fn(() => ({ valid: true, errors: [] })),
+    KIND_TO_PREFIX: { boot: 'boot-', theme: 'theme-', audio: 'audio-', data: 'data-', core: 'core-', scene: 'scene-', fx: 'fx-' },
+    KIND_TO_LOADER: { boot: 'dom', theme: 'dom', audio: 'audio', data: 'dom', core: 'gpu', scene: 'gpu', fx: 'gpu' },
   };
 });
 
@@ -150,11 +170,11 @@ describe('Scaffold facade: unloadBundle', () => {
     expect(facade.isLoaded('boot-splash')).toBe(false);
   });
 
-  it('unloadBundle is reflected in loadingState', async () => {
+  it('unloadBundle is reflected in loadingStateSignal', async () => {
     await facade.loadTheme();
     facade.unloadBundle('theme-branding');
 
-    const state = facade.loadingState();
+    const state = facade.loadingStateSignal.get();
     expect(state.loaded).not.toContain('theme-branding');
     expect(state.unloaded).toContain('theme-branding');
   });
@@ -200,6 +220,7 @@ describe('Scaffold facade: unloadScene', () => {
   });
 
   it('delegates scene unload to underlying facade', async () => {
+    await facade.initGpu();
     await facade.loadScene('level1');
     facade.unloadScene('level1');
     expect(facade.isLoaded('scene-level1')).toBe(false);
@@ -221,10 +242,10 @@ describe('Scaffold facade: load after unload', () => {
   });
 });
 
-describe('Scaffold facade: dispose', () => {
-  it('dispose is exposed and callable', () => {
+describe('Scaffold facade: getLoader', () => {
+  it('getLoader is exposed and returns null before gpu init', () => {
     const facade = createCoordinatorFacade(testManifest);
-    expect(typeof facade.dispose).toBe('function');
-    expect(() => facade.dispose()).not.toThrow();
+    expect(typeof facade.getLoader).toBe('function');
+    expect(facade.getLoader('gpu')).toBeNull();
   });
 });

@@ -46,19 +46,29 @@ export const manifest: Manifest = {
       assets: [{ alias: 'atlas-branding-wolf', src: 'atlas-branding-wolf.json' }],
     },
 
-    // When adding bundles for your game, use the appropriate prefix:
-    //
-    //   scene-*  → GPU spritesheets, backgrounds, tiles
-    //   core-*   → GPU in-game UI atlases
-    //   fx-*     → GPU particles, effects, VFX
-    //   audio-*  → Howler sound effects and music
-    //   data-*   → JSON config files
-    //   boot-*   → DOM pre-engine splash assets
-    //
-    // Examples:
-    //   { name: 'scene-tiles-mygame', assets: [{ alias: 'scene-tiles-mygame', src: 'atlas-tiles-mygame.json' }] },
-    //   { name: 'fx-blast', assets: [{ alias: 'fx-blast', src: 'vfx-blast.json' }] },
-    //   { name: 'audio-sfx-mygame', assets: [{ alias: 'audio-sfx-mygame', src: 'sfx-mygame.json' }] },
-    //   { name: 'audio-music-mygame', assets: [{ alias: 'audio-music-mygame', src: 'music-mygame.json' }] },
+    // ── Clue Connect game bundles ────────────────────────────────────────
+    // scene-clue-connect  → GPU tile atlas (placeholder until asset gen pass)
+    // core-clue-connect   → GPU HUD/UI atlas
+    // audio-clue-connect  → SFX + music (Howler)
+    // fx-clue-connect     → VFX particles
+
+    {
+      name: 'scene-clue-connect',
+      assets: [
+        { alias: 'scene-clue-connect', src: 'atlas-clue-connect.json' },
+      ],
+    },
+    {
+      name: 'core-clue-connect',
+      assets: [
+        { alias: 'core-clue-connect', src: 'atlas-hud-clue-connect.json' },
+      ],
+    },
+    {
+      name: 'audio-clue-connect',
+      assets: [
+        { alias: 'audio-clue-connect-sfx', src: 'sfx-clue-connect.json' },
+      ],
+    },
   ],
 };
