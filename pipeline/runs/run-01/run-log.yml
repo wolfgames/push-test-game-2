@@ -1,0 +1,42 @@
+run: "01"
+pipeline_version: "0.3.8"
+pass: "core"
+started: "2026-04-28T00:15:26Z"
+config:
+  think_only: false
+  trace: false
+  skip_groups: []
+  allow_skip_pass: false
+
+phases:
+  - id: pass-gate
+    status: complete
+    summary: "core is the first gated pass — no previous pass check required; gate passed"
+  - id: prime
+    status: complete
+    summary: "stack detected (pixi+solidjs+gsap+bun/vite/vitest); game stub is greenfield; host .claude/rules/ is empty (rules loaded from cortex via node_modules); WolfGamesLogo DOM overlay reserves 56px bottom; buildCmd=bun run build testCmd=bun run test:run"
+
+  - id: analyze
+    status: complete
+    summary: "27 features catalogued (3 exists, 2 partial, 18 new, 2 conflict, 2 content-gap); 3 high-risk areas; 5 open questions resolved in plan phase"
+  - id: plan
+    status: complete
+    summary: "7 batches; 28 new files; 7 modified files; viewport budget derived (52px cells, 7×9); all 5 open questions resolved; game slug=clue-connect"
+  - id: implement
+    status: complete
+    summary: "All 7 batches complete; 28 files created; 7 modified; 89 tests passing (18 test files) at implement completion; build clean"
+  - id: player-flow
+    status: complete
+    summary: "7 transitions checked; fun test pass; 5 issues found, 3 fixed; 2 carry-forward routing gaps (first-launch intro bypass, chapter-map routes to title)"
+  - id: integrate
+    status: complete
+    summary: "Dead getAllTileKinds export removed; dead TILE_LABELS import removed; companion area stub removed from HudRenderer (duplicate of CompanionRenderer); viewport_budget_recomputed_total=740 (no overflow)"
+  - id: verify
+    status: complete
+    summary: "Build clean; 230 tests passing (29 files); 1 fix cycle applied (scaffold test mocks corrected); browser MCP not available for visual playback"
+  - id: stabilize
+    status: partial
+    summary: "CoS walk: all 4 mandatory CoS PASS (core-interaction, canvas, animated-dynamics, scoring-base); completeness walk: 17/18 items met (cascade-escalation N/A by game design); build clean; 242/242 tests pass (30 files, +12 edge-case tests added); score popup added inline; interaction-archetype.md created; pipeline_status=partial (1 N/A completeness gap)"
+
+finished: "2026-04-28T01:32:15Z"
+status: partial

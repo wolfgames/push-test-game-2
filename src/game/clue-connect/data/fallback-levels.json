@@ -1,0 +1,40 @@
+{
+  "levels": [
+    {
+      "id": "fallback-1",
+      "chapter": 1,
+      "level": 1,
+      "moveLimit": 20,
+      "evidenceTarget": 100,
+      "board": [
+        ["footprint","footprint","magnifying-glass","magnifying-glass","flashlight","flashlight","fingerprint"],
+        ["footprint","rope","magnifying-glass","fingerprint","flashlight","scooby-snack","fingerprint"],
+        ["rope","rope","scooby-snack","fingerprint","scooby-snack","scooby-snack","magnifying-glass"],
+        ["footprint","rope","flashlight","flashlight","footprint","magnifying-glass","magnifying-glass"],
+        ["fingerprint","fingerprint","rope","flashlight","footprint","scooby-snack","rope"],
+        ["footprint","magnifying-glass","rope","fingerprint","fingerprint","flashlight","rope"],
+        ["magnifying-glass","scooby-snack","footprint","rope","magnifying-glass","fingerprint","scooby-snack"],
+        ["flashlight","flashlight","fingerprint","scooby-snack","rope","footprint","flashlight"],
+        ["footprint","magnifying-glass","scooby-snack","flashlight","fingerprint","rope","footprint"]
+      ]
+    },
+    {
+      "id": "fallback-2",
+      "chapter": 1,
+      "level": 2,
+      "moveLimit": 20,
+      "evidenceTarget": 100,
+      "board": [
+        ["rope","rope","rope","fingerprint","fingerprint","fingerprint","scooby-snack"],
+        ["footprint","magnifying-glass","rope","fingerprint","flashlight","scooby-snack","scooby-snack"],
+        ["footprint","magnifying-glass","flashlight","flashlight","flashlight","magnifying-glass","fingerprint"],
+        ["footprint","footprint","magnifying-glass","scooby-snack","rope","magnifying-glass","flashlight"],
+        ["fingerprint","flashlight","scooby-snack","scooby-snack","rope","rope","footprint"],
+        ["magnifying-glass","flashlight","fingerprint","footprint","magnifying-glass","flashlight","fingerprint"],
+        ["rope","scooby-snack","magnifying-glass","flashlight","fingerprint","footprint","rope"],
+        ["fingerprint","footprint","rope","scooby-snack","magnifying-glass","fingerprint","flashlight"],
+        ["scooby-snack","magnifying-glass","footprint","rope","footprint","scooby-snack","magnifying-glass"]
+      ]
+    }
+  ]
+}

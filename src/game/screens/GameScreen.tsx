@@ -5,13 +5,14 @@ import { PauseOverlay, useTuning, type ScaffoldTuning } from '~/core';
 import { Logo } from '~/core/ui/Logo';
 import { useAudio } from '~/core/systems/audio';
 import { useGameTracking } from '~/game/setup/tracking';
+import { useScreen } from '~/core/systems/screens';
 
 import type { GameTuning } from '~/game/tuning';
 import { useGameData } from '~/game/screens/useGameData';
 import { gameState } from '~/game/state';
 
-// Game-specific controller — swap this import for a different game
-import { setupGame } from '~/game/mygame/screens/gameController';
+// Clue Connect game controller
+import { setupGame } from '~/game/clue-connect/screens/gameController';
 
 export default function GameScreen() {
   const { coordinator } = useAssets();
@@ -19,7 +20,11 @@ export default function GameScreen() {
   const audio = useAudio();
   const gameData = useGameData();
   const { core: analytics } = useGameTracking();
+  const { goto, data } = useScreen();
   let containerRef: HTMLDivElement | undefined;
+
+  // Read screen navigation payload at mount time (adMockContinue, bonusMoves, level/chapter)
+  const screenData = data() as Record<string, unknown> | undefined;
 
   // Setup game-specific controller (creates signals & effects in reactive context)
   const controller = setupGame({
@@ -28,6 +33,8 @@ export default function GameScreen() {
     audio,
     gameData,
     analytics,
+    goto: (screen, data) => goto(screen as any, data),
+    screenData,
   });
 
   onMount(() => {

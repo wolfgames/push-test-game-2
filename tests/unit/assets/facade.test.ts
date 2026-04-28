@@ -12,27 +12,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@wolfgames/components/core', () => {
-  const createAssetFacade = vi.fn(({ loaders }: { loaders?: Record<string, unknown> }) => {
+  const createAssetCoordinator = vi.fn(({ loaders }: { loaders?: Record<string, unknown> }) => {
     const loaded: string[] = [];
+    const loaderMap: Record<string, unknown> = loaders ?? {};
     return {
       loadBundle: vi.fn(async (name: string) => { loaded.push(name); }),
       loadBundles: vi.fn(async (names: string[]) => { loaded.push(...names); }),
       backgroundLoadBundle: vi.fn(async () => {}),
       preloadScene: vi.fn(async () => {}),
-      loadBoot: vi.fn(async () => {}),
-      loadCore: vi.fn(async () => {}),
-      loadTheme: vi.fn(async () => {}),
-      loadAudio: vi.fn(async () => {}),
-      loadScene: vi.fn(async () => {}),
-      initGpu: vi.fn(async () => {}),
+      initLoader: vi.fn((type: string, loader: unknown) => { loaderMap[type] = loader; }),
       getLoadedBundles: vi.fn(() => loaded),
       isLoaded: vi.fn((name: string) => loaded.includes(name)),
       unloadBundle: vi.fn(),
       unloadBundles: vi.fn(),
       unloadScene: vi.fn(),
       startBackgroundLoading: vi.fn(async () => {}),
-      loadingState: vi.fn(() => ({ loading: [], loaded, errors: {}, bundleProgress: {}, progress: 0, backgroundLoading: [], unloaded: [] })),
-      loadingStateSignal: { get: vi.fn(), set: vi.fn(), subscribe: vi.fn(() => () => {}) },
+      loadingState: {
+        get: vi.fn(() => ({ loading: [], loaded, errors: {}, bundleProgress: {}, progress: 0, backgroundLoading: [], unloaded: [] })),
+        set: vi.fn(),
+        subscribe: vi.fn(() => () => {}),
+      },
       dom: {
         getFrameURL: vi.fn(async () => 'blob:mock'),
         get: vi.fn(() => null),
@@ -40,16 +39,41 @@ vi.mock('@wolfgames/components/core', () => {
         getSheet: vi.fn(() => null),
         getSpritesheet: vi.fn(() => null),
       },
-      getLoader: vi.fn(() => null),
+      getLoader: vi.fn((type: string) => loaderMap[type] ?? null),
       dispose: vi.fn(),
-      coordinator: {},
-      _loaders: loaders,
+      _loaders: loaderMap,
+    };
+  });
+
+  const createDomLoader = vi.fn(() => ({
+    init: vi.fn(),
+    loadBundle: vi.fn(async () => {}),
+    get: vi.fn(() => null),
+    getImage: vi.fn(() => null),
+    getSheet: vi.fn(() => null),
+    getSpritesheet: vi.fn(() => null),
+    has: vi.fn(() => false),
+    unloadBundle: vi.fn(),
+    dispose: vi.fn(),
+  }));
+
+  const createSignal = vi.fn((initial: unknown) => {
+    let value = initial;
+    const subscribers: Array<(v: unknown) => void> = [];
+    return {
+      get: vi.fn(() => value),
+      set: vi.fn((v: unknown) => { value = v; subscribers.forEach(fn => fn(v)); }),
+      subscribe: vi.fn((fn: (v: unknown) => void) => { subscribers.push(fn); return () => {}; }),
     };
   });
 
   return {
-    createAssetFacade,
+    createAssetCoordinator,
+    createDomLoader,
+    createSignal,
     validateManifest: vi.fn(() => ({ valid: true, errors: [] })),
+    KIND_TO_PREFIX: { boot: 'boot-', theme: 'theme-', audio: 'audio-', data: 'data-', core: 'core-', scene: 'scene-', fx: 'fx-' },
+    KIND_TO_LOADER: { boot: 'dom', theme: 'dom', audio: 'audio', data: 'dom', core: 'gpu', scene: 'gpu', fx: 'gpu' },
   };
 });
 
@@ -120,10 +144,10 @@ describe('createCoordinatorFacade', () => {
     expect(createPixiLoader).toHaveBeenCalledTimes(1);
   });
 
-  it('getGpuLoader() returns the auto-created loader after initGpu', async () => {
-    expect(facade.getGpuLoader()).toBeNull();
+  it('getLoader("gpu") returns the auto-created loader after initGpu', async () => {
+    expect(facade.getLoader('gpu')).toBeNull();
     await facade.initGpu();
-    expect(facade.getGpuLoader).toBeDefined();
+    expect(facade.getLoader('gpu')).toBeDefined();
   });
 
   it('audio.play delegates to HowlerLoader', () => {
@@ -149,8 +173,7 @@ describe('createCoordinatorFacade', () => {
     await facade.audio.unlock();
   });
 
-  it('exposes loadingState and loadingStateSignal', () => {
-    expect(typeof facade.loadingState).toBe('function');
+  it('exposes loadingStateSignal with get and subscribe', () => {
     expect(facade.loadingStateSignal).toBeDefined();
     expect(typeof facade.loadingStateSignal.get).toBe('function');
     expect(typeof facade.loadingStateSignal.subscribe).toBe('function');
